@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
+import os
 import time
-from datetime import datetime, timedelta
 
 app = FastAPI()
 
@@ -15,6 +15,8 @@ app.add_middleware(
 
 _cache = {}
 CACHE_TTL = 900  # 15 minutes
+FMP_KEY = os.environ.get("FMP_KEY", "")
+FMP_BASE = "https://financialmodelingprep.com/api/v3"
 
 def cached(key, fn):
     now = time.time()
@@ -25,121 +27,114 @@ def cached(key, fn):
         _cache[key] = {"data": data, "ts": now}
     return data
 
-def fetch_stooq(symbol):
-    """
-    Fetch daily OHLCV from Stooq — no API key required.
-    Returns last 30 days, parses closing prices.
-    Stooq symbols:
-      ^SPX  = S&P 500
-      ^VIX  = CBOE VIX
-      ^FTM  = FTSE 100
-      ^NIF  = Nifty 50
-    """
+def fetch_quote(symbol):
+    """Fetch latest quote from FMP."""
     try:
-        end = datetime.today()
-        start = end - timedelta(days=45)
-        url = (
-            f"https://stooq.com/q/d/l/"
-            f"?s={symbol.lower()}"
-            f"&d1={start.strftime('%Y%m%d')}"
-            f"&d2={end.strftime('%Y%m%d')}"
-            f"&i=d"
+        r = httpx.get(
+            f"{FMP_BASE}/quote/{symbol}",
+            params={"apikey": FMP_KEY},
+            timeout=10
         )
-        r = httpx.get(url, timeout=10, follow_redirects=True)
-        lines = r.text.strip().split("\n")
-        if len(lines) < 2:
-            print(f"Stooq no data for {symbol}: {r.text[:200]}")
+        data = r.json()
+        if not data or not isinstance(data, list) or not data[0].get("price"):
+            print(f"FMP empty for {symbol}: {str(data)[:200]}")
             return None
-        # parse CSV — Date,Open,High,Low,Close,Volume
-        header = lines[0].split(",")
-        rows = [l.split(",") for l in lines[1:] if l.strip()]
-        if not rows:
-            return None
-        close_idx = header.index("Close") if "Close" in header else 4
-        closes = []
-        for row in rows:
-            try:
-                closes.append(float(row[close_idx]))
-            except:
-                pass
-        if len(closes) < 2:
-            return None
-        current = round(closes[-1], 2)
-        prev = round(closes[-2], 2)
-        change_pct = round((current - prev) / prev * 100, 2)
+        q = data[0]
         return {
             "symbol": symbol,
-            "current": current,
-            "prev": prev,
-            "change_pct": change_pct,
-            "series": [round(c, 2) for c in closes[-10:]],
+            "current": round(float(q["price"]), 2),
+            "prev": round(float(q["previousClose"]), 2),
+            "change_pct": round(float(q["changesPercentage"]), 2),
+            "name": q.get("name", symbol),
         }
     except Exception as e:
-        print(f"fetch_stooq error {symbol}: {e}")
+        print(f"fetch_quote error {symbol}: {e}")
         return None
 
+def fetch_history(symbol, days=10):
+    """Fetch recent daily closes from FMP."""
+    try:
+        r = httpx.get(
+            f"{FMP_BASE}/historical-price-full/{symbol}",
+            params={"apikey": FMP_KEY, "timeseries": days},
+            timeout=10
+        )
+        data = r.json()
+        hist = data.get("historical", [])
+        if not hist:
+            return []
+        return [round(float(h["close"]), 2) for h in reversed(hist)]
+    except Exception as e:
+        print(f"fetch_history error {symbol}: {e}")
+        return []
+
 def build_field(index_symbol, vol_symbol=None, vol_range=(10, 80)):
-    idx = fetch_stooq(index_symbol)
+    idx = fetch_quote(index_symbol)
     if not idx:
         return None
     change_pct = idx["change_pct"]
     idx_norm = round(min(max((change_pct + 3) / 6, 0), 1), 3)
+    series = fetch_history(index_symbol)
+
     vol_data = None
     vol_norm = 0.5
     if vol_symbol:
-        vol = fetch_stooq(vol_symbol)
+        vol = fetch_quote(vol_symbol)
         if vol:
             vraw = vol["current"]
             vol_norm = round(min(max((vraw - vol_range[0]) / (vol_range[1] - vol_range[0]), 0), 1), 3)
+            vol_series = fetch_history(vol_symbol)
             vol_data = {
                 "raw": vraw,
                 "normalised": vol_norm,
                 "symbol": vol_symbol,
-                "series": vol["series"],
-                "source": f"Stooq — {vol_symbol}",
+                "series": vol_series,
+                "source": f"FMP — {vol_symbol}",
             }
+
     return {
         "index": {
             "symbol": index_symbol,
+            "name": idx["name"],
             "current": idx["current"],
             "change_pct": change_pct,
             "normalised": idx_norm,
-            "series": idx["series"],
+            "series": series,
         },
         "volatility": vol_data,
         "field_value": round(vol_norm * 0.7 + (1 - idx_norm) * 0.3, 3),
         "confidence": 0.85 if vol_data else 0.65,
-        "source": "Stooq",
+        "source": "Financial Modelling Prep",
         "lag_days": 0,
     }
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "0.5", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "0.6", "status": "live"}
 
 @app.get("/api/market/us")
 def get_us_market():
-    return cached("us_market", lambda: build_field("^SPX", vol_symbol="^VIX", vol_range=(10, 80)))
+    return cached("us_market", lambda: build_field("%5EGSPC", vol_symbol="%5EVIX", vol_range=(10, 80)))
 
 @app.get("/api/market/uk")
 def get_uk_market():
-    return cached("uk_market", lambda: build_field("^FTM", vol_range=(10, 60)))
+    return cached("uk_market", lambda: build_field("%5EFTSE", vol_range=(10, 60)))
 
 @app.get("/api/market/india")
 def get_india_market():
-    return cached("india_market", lambda: build_field("^NIF", vol_range=(10, 60)))
+    return cached("india_market", lambda: build_field("%5ENSEI", vol_range=(10, 60)))
 
 @app.get("/api/market/all")
 def get_all_markets():
     return {
-        "us":    cached("us_market",    lambda: build_field("^SPX", vol_symbol="^VIX", vol_range=(10, 80))),
-        "uk":    cached("uk_market",    lambda: build_field("^FTM",                    vol_range=(10, 60))),
-        "india": cached("india_market", lambda: build_field("^NIF",                    vol_range=(10, 60))),
+        "us":    cached("us_market",    lambda: build_field("%5EGSPC", vol_symbol="%5EVIX", vol_range=(10, 80))),
+        "uk":    cached("uk_market",    lambda: build_field("%5EFTSE",                       vol_range=(10, 60))),
+        "india": cached("india_market", lambda: build_field("%5ENSEI",                       vol_range=(10, 60))),
     }
 
 @app.get("/api/debug")
 def debug():
     results = {}
-    for sym in ["^SPX", "^VIX", "^FTM", "^NIF"]:
-        results[sym] = fetch_stooq(sym)
-    return results
+    for sym in ["%5EGSPC", "%5EVIX", "%5EFTSE", "%5ENSEI"]:
+        results[sym] = fetch_quote(sym)
+    return {"key_set": bool(FMP_KEY), "results": results}
