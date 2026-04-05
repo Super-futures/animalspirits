@@ -610,16 +610,10 @@ function updateTime(){
     now.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
 }
 
-// ── Live data pipeline — Yahoo Finance direct ───────────────
+// ── Live data pipeline — Render proxy ───────────────────────
+const API_URL = 'https://animalspirits-api.onrender.com';
 window.liveMarkets = null;
 let apiStatus = 'loading';
-
-const YF_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart/';
-const TICKERS = {
-  us:    { index: '%5EGSPC', vol: '%5EVIX',  volRange: [10, 80] },
-  uk:    { index: '%5EFTSE', vol: null,       volRange: [10, 60] },
-  india: { index: '%5ENSEI', vol: null,       volRange: [10, 60] },
-};
 
 function updateAPIBadge() {
   const badge = document.getElementById('api-badge');
@@ -635,80 +629,24 @@ function updateAPIBadge() {
   badge.style.color = s.color;
 }
 
-async function fetchYF(ticker) {
+async function fetchLiveData() {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch(`${YF_BASE}${ticker}?range=5d&interval=1d`, {
-      signal: controller.signal
-    });
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const r = await fetch(API_URL + '/api/market/all', { signal: controller.signal });
     clearTimeout(timer);
+    if (!r.ok) throw new Error('non-200');
     const d = await r.json();
-    const meta = d?.chart?.result?.[0]?.meta;
-    const closes = d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v => v != null);
-    if (!meta || !closes || closes.length < 2) return null;
-    const current = closes[closes.length - 1];
-    const prev = closes[closes.length - 2];
-    const changePct = ((current - prev) / prev) * 100;
-    return {
-      current: round2(current),
-      prev: round2(prev),
-      changePct: round2(changePct),
-      series: closes.map(round2),
-      name: meta.longName || meta.shortName || ticker,
-    };
-  } catch(e) {
-    console.warn('YF fetch failed for', ticker, e.message);
-    return null;
-  }
-}
-
-function round2(v) { return Math.round(v * 100) / 100; }
-
-function buildField(indexData, volData, volRange) {
-  if (!indexData) return null;
-  const changePct = indexData.changePct;
-  const idxNorm = Math.min(Math.max((changePct + 3) / 6, 0), 1);
-  let volNorm = 0.5, volInfo = null;
-  if (volData) {
-    const vraw = volData.current;
-    volNorm = Math.min(Math.max((vraw - volRange[0]) / (volRange[1] - volRange[0]), 0), 1);
-    volInfo = { raw: round2(vraw), normalised: round2(volNorm) };
-  }
-  return {
-    index: { current: indexData.current, changePct, name: indexData.name, series: indexData.series },
-    volatility: volInfo,
-    field_value: round2(volNorm * 0.7 + (1 - idxNorm) * 0.3),
-    confidence: volData ? 0.88 : 0.7,
-    source: 'Yahoo Finance',
-  };
-}
-
-async function fetchLiveData() {
-  updateAPIBadge();
-  try {
-    const [spx, vix, ftse, nsei] = await Promise.allSettled([
-      fetchYF(TICKERS.us.index),
-      fetchYF(TICKERS.us.vol),
-      fetchYF(TICKERS.uk.index),
-      fetchYF(TICKERS.india.index),
-    ]);
-    const get = r => r.status === 'fulfilled' ? r.value : null;
-    const markets = {
-      us:    buildField(get(spx), get(vix),  TICKERS.us.volRange),
-      uk:    buildField(get(ftse), null,      TICKERS.uk.volRange),
-      india: buildField(get(nsei), null,      TICKERS.india.volRange),
-    };
-    const liveCount = Object.values(markets).filter(Boolean).length;
-    if (liveCount === 0) throw new Error('no data');
-    window.liveMarkets = markets;
+    const liveCount = Object.values(d).filter(v => v !== null).length;
+    if (liveCount === 0) throw new Error('all null');
+    window.liveMarkets = d;
     apiStatus = liveCount === 3 ? 'live' : 'partial';
     updateAPIBadge();
     panels(); draw();
   } catch(e) {
     apiStatus = 'error';
     updateAPIBadge();
-    console.warn('Yahoo Finance unavailable — using simulated data');
+    console.warn('API unavailable — using simulated data:', e.message);
   }
 }
 
