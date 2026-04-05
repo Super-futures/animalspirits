@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
-import os
 import time
+from datetime import datetime, timedelta
 
 app = FastAPI()
 
@@ -14,9 +14,7 @@ app.add_middleware(
 )
 
 _cache = {}
-CACHE_TTL = 900
-AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
-AV_BASE = "https://www.alphavantage.co/query"
+CACHE_TTL = 900  # 15 minutes
 
 def cached(key, fn):
     now = time.time()
@@ -27,33 +25,61 @@ def cached(key, fn):
         _cache[key] = {"data": data, "ts": now}
     return data
 
-def fetch_quote(symbol):
+def fetch_stooq(symbol):
+    """
+    Fetch daily OHLCV from Stooq — no API key required.
+    Returns last 30 days, parses closing prices.
+    Stooq symbols:
+      ^SPX  = S&P 500
+      ^VIX  = CBOE VIX
+      ^FTM  = FTSE 100
+      ^NIF  = Nifty 50
+    """
     try:
-        r = httpx.get(AV_BASE, params={
-            "function": "GLOBAL_QUOTE",
-            "symbol": symbol,
-            "apikey": AV_KEY,
-        }, timeout=10)
-        data = r.json()
-        q = data.get("Global Quote", {})
-        if not q or not q.get("05. price"):
-            print(f"Empty quote for {symbol}: {data}")
+        end = datetime.today()
+        start = end - timedelta(days=45)
+        url = (
+            f"https://stooq.com/q/d/l/"
+            f"?s={symbol.lower()}"
+            f"&d1={start.strftime('%Y%m%d')}"
+            f"&d2={end.strftime('%Y%m%d')}"
+            f"&i=d"
+        )
+        r = httpx.get(url, timeout=10, follow_redirects=True)
+        lines = r.text.strip().split("\n")
+        if len(lines) < 2:
+            print(f"Stooq no data for {symbol}: {r.text[:200]}")
             return None
-        price = float(q["05. price"])
-        change_pct = float(q["10. change percent"].replace("%", ""))
-        prev = float(q["08. previous close"])
+        # parse CSV — Date,Open,High,Low,Close,Volume
+        header = lines[0].split(",")
+        rows = [l.split(",") for l in lines[1:] if l.strip()]
+        if not rows:
+            return None
+        close_idx = header.index("Close") if "Close" in header else 4
+        closes = []
+        for row in rows:
+            try:
+                closes.append(float(row[close_idx]))
+            except:
+                pass
+        if len(closes) < 2:
+            return None
+        current = round(closes[-1], 2)
+        prev = round(closes[-2], 2)
+        change_pct = round((current - prev) / prev * 100, 2)
         return {
             "symbol": symbol,
-            "current": round(price, 2),
-            "prev": round(prev, 2),
-            "change_pct": round(change_pct, 2),
+            "current": current,
+            "prev": prev,
+            "change_pct": change_pct,
+            "series": [round(c, 2) for c in closes[-10:]],
         }
     except Exception as e:
-        print(f"fetch_quote error {symbol}: {e}")
+        print(f"fetch_stooq error {symbol}: {e}")
         return None
 
 def build_field(index_symbol, vol_symbol=None, vol_range=(10, 80)):
-    idx = fetch_quote(index_symbol)
+    idx = fetch_stooq(index_symbol)
     if not idx:
         return None
     change_pct = idx["change_pct"]
@@ -61,7 +87,7 @@ def build_field(index_symbol, vol_symbol=None, vol_range=(10, 80)):
     vol_data = None
     vol_norm = 0.5
     if vol_symbol:
-        vol = fetch_quote(vol_symbol)
+        vol = fetch_stooq(vol_symbol)
         if vol:
             vraw = vol["current"]
             vol_norm = round(min(max((vraw - vol_range[0]) / (vol_range[1] - vol_range[0]), 0), 1), 3)
@@ -69,7 +95,8 @@ def build_field(index_symbol, vol_symbol=None, vol_range=(10, 80)):
                 "raw": vraw,
                 "normalised": vol_norm,
                 "symbol": vol_symbol,
-                "source": f"Alpha Vantage — {vol_symbol}",
+                "series": vol["series"],
+                "source": f"Stooq — {vol_symbol}",
             }
     return {
         "index": {
@@ -77,49 +104,42 @@ def build_field(index_symbol, vol_symbol=None, vol_range=(10, 80)):
             "current": idx["current"],
             "change_pct": change_pct,
             "normalised": idx_norm,
+            "series": idx["series"],
         },
         "volatility": vol_data,
         "field_value": round(vol_norm * 0.7 + (1 - idx_norm) * 0.3, 3),
         "confidence": 0.85 if vol_data else 0.65,
-        "source": "Alpha Vantage",
+        "source": "Stooq",
         "lag_days": 0,
     }
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "0.4", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "0.5", "status": "live"}
 
 @app.get("/api/market/us")
 def get_us_market():
-    return cached("us_market", lambda: build_field("SPY", vol_symbol="VIXY", vol_range=(10, 80)))
+    return cached("us_market", lambda: build_field("^SPX", vol_symbol="^VIX", vol_range=(10, 80)))
 
 @app.get("/api/market/uk")
 def get_uk_market():
-    return cached("uk_market", lambda: build_field("EWU", vol_range=(10, 60)))
+    return cached("uk_market", lambda: build_field("^FTM", vol_range=(10, 60)))
 
 @app.get("/api/market/india")
 def get_india_market():
-    return cached("india_market", lambda: build_field("INDA", vol_range=(10, 60)))
+    return cached("india_market", lambda: build_field("^NIF", vol_range=(10, 60)))
 
 @app.get("/api/market/all")
 def get_all_markets():
     return {
-        "us":    cached("us_market",    lambda: build_field("SPY",  vol_symbol="VIXY", vol_range=(10, 80))),
-        "uk":    cached("uk_market",    lambda: build_field("EWU",                     vol_range=(10, 60))),
-        "india": cached("india_market", lambda: build_field("INDA",                    vol_range=(10, 60))),
+        "us":    cached("us_market",    lambda: build_field("^SPX", vol_symbol="^VIX", vol_range=(10, 80))),
+        "uk":    cached("uk_market",    lambda: build_field("^FTM",                    vol_range=(10, 60))),
+        "india": cached("india_market", lambda: build_field("^NIF",                    vol_range=(10, 60))),
     }
 
 @app.get("/api/debug")
 def debug():
-    """Test AV with multiple symbols to find what works."""
     results = {}
-    for sym in ["SPY", "IBM", "AAPL", "EWU", "INDA", "VIXY"]:
-        r = httpx.get(AV_BASE, params={
-            "function": "GLOBAL_QUOTE",
-            "symbol": sym,
-            "apikey": AV_KEY,
-        }, timeout=10)
-        d = r.json()
-        q = d.get("Global Quote", {})
-        results[sym] = q.get("05. price", "empty") if q else str(d)
-    return {"key_set": bool(AV_KEY), "results": results}
+    for sym in ["^SPX", "^VIX", "^FTM", "^NIF"]:
+        results[sym] = fetch_stooq(sym)
+    return results
