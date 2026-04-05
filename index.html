@@ -242,23 +242,105 @@ function nz(n,s){return(Math.sin(s*3.1+n*11.7)+Math.sin(s*7.9+n*2.3))*0.25+0.5}
 function gdSim(ri){
   const s=seed+ri*3.7;
   const tm=TH_MULT[timeHorizon];
-  function sv2(base,var_){return Math.max(0.05,Math.min(0.95,base+(var_-0.5)*tm*0.35))}
-  const rawSV=sn(1,s)*0.8+nz(1,s)*0.2;
-  const rawMV=sn(1.4,s)*0.75+nz(2,s)*0.25;
-  const rawNVel=(sn(18,s)*2-1)*tm;
+
+  // ── Regional rhythm differentiation ──────────────────────────
+  // India: higher frequency, higher variance
+  // UK: lower variance, persistent states
+  // US: standard
+  const regionId = ['us','uk','india'][ri];
+  const rFreq   = regionId==='india' ? 1.8 : regionId==='uk' ? 0.7 : 1.0;
+  const rVar    = regionId==='india' ? 1.4 : regionId==='uk' ? 0.6 : 1.0;
+  const rPersist= regionId==='uk'    ? 0.7 : 1.0; // UK states fade slower
+
+  function sv2(base,var_,clVar){
+    return Math.max(0.05,Math.min(0.95,base+(var_-0.5)*tm*0.35*rVar*clVar));
+  }
+
+  const rawSV=sn(1*rFreq,s)*0.8+nz(1,s)*0.2;
+  const rawMV=sn(1.4*rFreq,s)*0.75+nz(2,s)*0.25;
+
+  // ── Cluster-specific temporal bias ───────────────────────────
+  // anxiety:    S leads M (positive ld) — anticipatory
+  // confidence: co-incident (ld near zero) — concurrent
+  // aspiration: M leads S (negative ld) — lagging desire
+  // constraint: M strongly leads S — reactive, persistent
+  const lagBias    = {anxiety:6, confidence:0, aspiration:-5, constraint:-9};
+  const lagRange   = {anxiety:8, confidence:4, aspiration:6,  constraint:4};
+  const clVolatility={anxiety:1.3,confidence:0.8,aspiration:1.2,constraint:0.6};
+
+  function makeLd(cl){
+    const bias=lagBias[cl]||0, range=lagRange[cl]||8;
+    return Math.round(bias+(sn(9+Object.keys(lagBias).indexOf(cl),s)-0.5)*range*rPersist);
+  }
+
+  // ── Cluster-specific narrative velocity range ─────────────────
+  // anxiety: high velocity, fast-changing
+  // confidence: moderate, steady
+  // aspiration: moderate, positive bias
+  // constraint: low velocity — stories fade here
+  const nvelScale={anxiety:1.3,confidence:0.9,aspiration:1.0,constraint:0.5};
+  const nvelBias ={anxiety:0,  confidence:0.1,aspiration:0.15,constraint:-0.1};
+
+  function makeNvel(cl,seedOff){
+    const scale=nvelScale[cl]||1, bias=nvelBias[cl]||0;
+    return Math.max(-1,Math.min(1,(sn(seedOff,s)*2-1)*tm*scale+bias));
+  }
+
   const themeBase=THEMES[sc][REGIONS[ri].id];
   const themes=themeBase.map((t,i)=>({
     label:t.label,
     volume:Math.max(0.1,sn(30+i+ri*7,s)*0.8+nz(20+i,s)*0.2),
     velocity:(sn(40+i+ri*5,s)*2-1)*tm,
   })).sort((a,b)=>b.volume-a.volume).slice(0,3);
-  return{
-    anxiety:{sv:sv2(rawSV,nz(1,s)),sc2:0.55+sn(5,s)*0.3,mv:sv2(rawMV,nz(2,s)),mc:0.65+sn(6,s)*0.25,nv:sn(4,s)*0.9+nz(9,s)*0.1,nc:0.5+sn(17,s)*0.35,nvel:rawNVel,ndir:sn(19,s)*Math.PI*2,lead:sn(1.2,s),conc:sn(1,s)*0.9,lag:sn(0.8,s)*0.7,ld:Math.round((sn(9,s)-0.5)*14),themes},
-    confidence:{sv:sv2(1-rawSV,nz(3,s)),sc2:0.6+sn(7,s)*0.3,mv:sv2(1-rawMV*0.9,nz(4,s)),mc:0.7+sn(8,s)*0.2,nv:(1-sn(4.2,s))*0.8+nz(10,s)*0.2,nc:0.55+sn(20,s)*0.3,nvel:(sn(21,s)*2-1)*tm,ndir:sn(22,s)*Math.PI*2,lead:1-sn(1.3,s),conc:(1-sn(1,s))*0.85,lag:(1-sn(0.9,s))*0.75,ld:Math.round((sn(10,s)-0.5)*10),themes},
-    aspiration:{sv:sv2(sn(3,s)*0.75,nz(5,s)),sc2:0.45+sn(11,s)*0.35,mv:sv2(sn(3.3,s)*0.7,nz(6,s)),mc:0.55+sn(12,s)*0.3,nv:sn(5,s)*0.85+nz(11,s)*0.15,nc:0.45+sn(23,s)*0.4,nvel:(sn(24,s)*2-1)*tm,ndir:sn(25,s)*Math.PI*2,lead:sn(3.2,s),conc:sn(3,s)*0.8,lag:sn(2.8,s)*0.65,ld:Math.round((sn(13,s)-0.5)*12),themes},
-    constraint:{sv:sv2(sn(2,s)*0.65,nz(7,s)),sc2:0.5+sn(14,s)*0.3,mv:sv2(sn(2.2,s)*0.6,nz(8,s)),mc:0.6+sn(15,s)*0.25,nv:sn(6,s)*0.7+nz(12,s)*0.3,nc:0.5+sn(26,s)*0.35,nvel:(sn(27,s)*2-1)*tm,ndir:sn(28,s)*Math.PI*2,lead:sn(2.1,s),conc:sn(2,s)*0.75,lag:sn(1.9,s)*0.6,ld:Math.round((sn(16,s)-0.5)*8),themes},
+
+  const result = {
+    anxiety:{
+      sv:sv2(rawSV,nz(1,s),clVolatility.anxiety),
+      sc2:0.55+sn(5,s)*0.3,
+      mv:sv2(rawMV,nz(2,s),clVolatility.anxiety),
+      mc:0.65+sn(6,s)*0.25,
+      nv:sn(4*rFreq,s)*0.9+nz(9,s)*0.1,
+      nc:0.5+sn(17,s)*0.35,
+      nvel:makeNvel('anxiety',18),
+      ndir:sn(19,s)*Math.PI*2,
+      lead:sn(1.2*rFreq,s),conc:sn(1*rFreq,s)*0.9,lag:sn(0.8*rFreq,s)*0.7,
+      ld:makeLd('anxiety'),themes},
+    confidence:{
+      sv:sv2(1-rawSV,nz(3,s),clVolatility.confidence),
+      sc2:0.6+sn(7,s)*0.3,
+      mv:sv2(1-rawMV*0.9,nz(4,s),clVolatility.confidence),
+      mc:0.7+sn(8,s)*0.2,
+      nv:(1-sn(4.2*rFreq,s))*0.8+nz(10,s)*0.2,
+      nc:0.55+sn(20,s)*0.3,
+      nvel:makeNvel('confidence',21),
+      ndir:sn(22,s)*Math.PI*2,
+      lead:1-sn(1.3*rFreq,s),conc:(1-sn(1*rFreq,s))*0.85,lag:(1-sn(0.9*rFreq,s))*0.75,
+      ld:makeLd('confidence'),themes},
+    aspiration:{
+      sv:sv2(sn(3*rFreq,s)*0.75,nz(5,s),clVolatility.aspiration),
+      sc2:0.45+sn(11,s)*0.35,
+      mv:sv2(sn(3.3*rFreq,s)*0.7,nz(6,s),clVolatility.aspiration),
+      mc:0.55+sn(12,s)*0.3,
+      nv:sn(5*rFreq,s)*0.85+nz(11,s)*0.15,
+      nc:0.45+sn(23,s)*0.4,
+      nvel:makeNvel('aspiration',24),
+      ndir:sn(25,s)*Math.PI*2,
+      lead:sn(3.2*rFreq,s),conc:sn(3*rFreq,s)*0.8,lag:sn(2.8*rFreq,s)*0.65,
+      ld:makeLd('aspiration'),themes},
+    constraint:{
+      sv:sv2(sn(2*rFreq,s)*0.65,nz(7,s),clVolatility.constraint),
+      sc2:0.5+sn(14,s)*0.3,
+      mv:sv2(sn(2.2*rFreq,s)*0.6,nz(8,s),clVolatility.constraint),
+      mc:0.6+sn(15,s)*0.25,
+      nv:sn(6*rFreq,s)*0.7+nz(12,s)*0.3,
+      nc:0.5+sn(26,s)*0.35,
+      nvel:makeNvel('constraint',27),
+      ndir:sn(28,s)*Math.PI*2,
+      lead:sn(2.1*rFreq,s),conc:sn(2*rFreq,s)*0.75,lag:sn(1.9*rFreq,s)*0.6,
+      ld:makeLd('constraint'),themes},
   };
-  // apply narrative force to each cluster
+
+  // apply narrative force
   ['anxiety','confidence','aspiration','constraint'].forEach(cl => {
     if (!result[cl]) return;
     const forced = applyNarrativeForce(result[cl]);
@@ -266,6 +348,7 @@ function gdSim(ri){
     result[cl].mv = forced.mv;
     result[cl]._dispersion = forced.dispersion;
   });
+
   return result;
 }
 
@@ -954,6 +1037,12 @@ function computeSystemReading(allData) {
   const maxVel  = Math.max(...vels.map(Math.abs));
 
   // pick the most salient reading
+  // check for global synchronisation — all regions in same entanglement state
+  const states = clusterData.map(cv => getES(cv).id);
+  const allSame = states.every(s => s === states[0]);
+  if (allSame && states[0] !== 'concurrent')
+    return `Global synchronisation — all regions ${states[0].replace('-',' ')} simultaneously`;
+
   if (maxDiv > 0.35 && maxVel > 0.4)
     return 'Narrative accelerating through divergent conditions across regions';
   if (maxDiv > 0.35 && avgVel < -0.2)
