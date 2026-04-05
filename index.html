@@ -631,6 +631,105 @@ async function safeFetch(url) {
   }
 }
 
+// ── Browser-direct GDELT ──────────────────────────────────────
+const GDELT_BASE = 'https://api.gdeltproject.org/api/v2/doc/doc';
+const GDELT_QUERIES = {
+  anxiety:    {us:'economy recession unemployment inflation',    uk:'economy recession cost living',       india:'economy recession inflation rupee'},
+  confidence: {us:'economic growth jobs investment bull market', uk:'economic growth investment jobs',     india:'economic growth investment gdp'},
+  aspiration: {us:'luxury travel real estate consumer spending', uk:'luxury travel property spending',    india:'luxury travel consumer middle class'},
+  constraint: {us:'budget cuts debt bankruptcy frugal',          uk:'austerity budget food bank debt',    india:'budget savings debt frugal austerity'},
+};
+
+async function fetchGDELT(region, cluster) {
+  try {
+    const query = (GDELT_QUERIES[cluster] || {})[region] || 'economy';
+    const params = new URLSearchParams({
+      query: query + ' sourcelang:english',
+      mode: 'artlist', maxrecords: '25', timespan: '24h', format: 'json'
+    });
+    const res = await fetch(`${GDELT_BASE}?${params}`);
+    if (!res.ok) return null;
+    const d = await res.json();
+    const articles = d.articles || [];
+    if (!articles.length) return null;
+    const tones = articles.map(a => parseFloat(a.tone || 0)).filter(t => !isNaN(t));
+    if (!tones.length) return null;
+    const avgTone = tones.reduce((a,b) => a+b, 0) / tones.length;
+    const toneNorm = Math.min(Math.max((avgTone + 10) / 20, 0), 1);
+    const velocity = tones.length > 1 ? (tones[tones.length-1] - tones[0]) / tones.length / 2 : 0;
+    const titles = articles.slice(0,3).map(a => a.title).filter(Boolean);
+    return {
+      volume: articles.length, avg_tone: Math.round(avgTone*100)/100,
+      tone_normalised: Math.round(toneNorm*1000)/1000,
+      velocity: Math.round(velocity*1000)/1000,
+      confidence: 0.75, source: 'GDELT',
+      dominant_headline: titles[0] || '',
+      top_headlines: titles,
+    };
+  } catch(e) {
+    console.warn('GDELT fetch failed', region, cluster, e.message);
+    return null;
+  }
+}
+
+// ── Browser-direct Wikimedia ──────────────────────────────────
+const WIKI_TERMS = {
+  anxiety:    {us:['Recession','Unemployment','Stock_market_crash'],    uk:['Recession','Unemployment','Cost_of_living_crisis'], india:['Recession','Unemployment_in_India','Inflation']},
+  confidence: {us:['Bull_market','Economic_growth','Consumer_confidence'], uk:['Economic_growth','Consumer_confidence','Investment'], india:['Economic_growth','Bull_market','Investment']},
+  aspiration: {us:['Luxury_goods','Travel','Real_estate'],              uk:['Luxury_goods','Travel','Property'],                  india:['Luxury_goods','Tourism','Real_estate']},
+  constraint: {us:['Budget','Debt','Frugality'],                        uk:['Austerity','Budget','Food_bank'],                   india:['Budget','Debt','Frugality']},
+};
+
+async function fetchWikiViews(article) {
+  try {
+    const end = new Date(); const start = new Date(end - 7*86400000);
+    const fmt = d => d.toISOString().slice(0,10).replace(/-/g,'');
+    const url = `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/all-agents/${article}/daily/${fmt(start)}/${fmt(end)}`;
+    const res = await fetch(url, {headers:{'User-Agent':'AnimalSpirits/1.0'}});
+    if (!res.ok) return 0;
+    const d = await res.json();
+    const items = d.items || [];
+    return items.length ? items.reduce((a,b) => a + b.views, 0) / items.length : 0;
+  } catch(e) { return 0; }
+}
+
+async function fetchSentiment(region, cluster) {
+  const terms = (WIKI_TERMS[cluster] || {})[region] || [];
+  if (!terms.length) return null;
+  const views = await Promise.all(terms.map(t => fetchWikiViews(t)));
+  const total = views.reduce((a,b) => a+b, 0);
+  if (!total) return null;
+  const normalised = Math.min(total / 50000, 1);
+  return {
+    value: Math.round(normalised*1000)/1000,
+    confidence: 0.72, source: 'Wikimedia Pageviews',
+    terms, views: views.map(Math.round),
+  };
+}
+
+async function fetchAllSentiment() {
+  const result = {};
+  for (const region of ['us','uk','india']) {
+    result[region] = {};
+    for (const cluster of ['anxiety','confidence','aspiration','constraint']) {
+      result[region][cluster] = await fetchSentiment(region, cluster);
+    }
+  }
+  return result;
+}
+
+async function fetchAllNarrative() {
+  const result = {};
+  for (const region of ['us','uk','india']) {
+    result[region] = {};
+    for (const cluster of ['anxiety','confidence','aspiration','constraint']) {
+      result[region][cluster] = await fetchGDELT(region, cluster);
+      await new Promise(res => setTimeout(res, 200));
+    }
+  }
+  return result;
+}
+
 // axis status — tracks each independently
 const axisStatus = { market: false, sentiment: false, narrative: false };
 
@@ -667,30 +766,25 @@ async function fetchLiveData() {
   const badge = document.getElementById('api-badge');
   if (badge) { badge.textContent = 'connecting...'; badge.style.color = 'var(--text3)'; }
 
-  // fetch market first — fastest, most important
-  const mkt = await fetchWithWake(API_URL + '/api/market/all', 90000);
-  if (mkt && Object.values(mkt).some(v => v !== null)) {
-    window.liveMarkets = mkt;
-    axisStatus.market = true;
-    updateAPIBadge(); panels(); draw();
-  }
-
-  // then sentiment and narrative in parallel
-  const [sentRes, narrRes] = await Promise.allSettled([
-    safeFetch(API_URL + '/api/sentiment/all'),
-    safeFetch(API_URL + '/api/narrative/all'),
+  // fetch all three axes — market via Render proxy, sentiment+narrative browser-direct
+  const [mktRes, sentRes, narrRes] = await Promise.allSettled([
+    fetchWithWake(API_URL + '/api/market/all', 90000),
+    fetchAllSentiment(),
+    fetchAllNarrative(),
   ]);
 
+  const mkt  = mktRes.status  === 'fulfilled' ? mktRes.value  : null;
   const sent = sentRes.status === 'fulfilled' ? sentRes.value : null;
   const narr = narrRes.status === 'fulfilled' ? narrRes.value : null;
 
-  if (sent && Object.values(sent).some(v => Object.values(v).some(Boolean))) {
-    window.liveSentiment = sent;
-    axisStatus.sentiment = true;
+  if (mkt && Object.values(mkt).some(v => v !== null)) {
+    window.liveMarkets = mkt; axisStatus.market = true;
   }
-  if (narr && Object.values(narr).some(v => Object.values(v).some(Boolean))) {
-    window.liveNarrative = narr;
-    axisStatus.narrative = true;
+  if (sent && Object.values(sent).some(r => Object.values(r).some(Boolean))) {
+    window.liveSentiment = sent; axisStatus.sentiment = true;
+  }
+  if (narr && Object.values(narr).some(r => Object.values(r).some(Boolean))) {
+    window.liveNarrative = narr; axisStatus.narrative = true;
   }
 
   updateAPIBadge(); panels(); draw();
