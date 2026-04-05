@@ -16,7 +16,7 @@ app.add_middleware(
 _cache = {}
 CACHE_TTL = 900
 FMP_KEY = os.environ.get("FMP_KEY", "")
-FMP_BASE = "https://financialmodelingprep.com/api/v3"
+FMP_BASE = "https://financialmodelingprep.com/stable"
 
 def cached(key, fn):
     now = time.time()
@@ -30,19 +30,20 @@ def cached(key, fn):
 def fetch_quote(symbol):
     try:
         r = httpx.get(
-            f"{FMP_BASE}/quote/{symbol}",
-            headers={"apikey": FMP_KEY},
+            f"{FMP_BASE}/quote",
+            params={"symbol": symbol, "apikey": FMP_KEY},
             timeout=10
         )
         data = r.json()
         if not data or not isinstance(data, list) or not data[0].get("price"):
+            print(f"FMP empty for {symbol}: {str(data)[:300]}")
             return None
         q = data[0]
         return {
             "symbol": symbol,
             "current": round(float(q["price"]), 2),
-            "prev": round(float(q["previousClose"]), 2),
-            "change_pct": round(float(q["changesPercentage"]), 2),
+            "prev": round(float(q.get("previousClose", q["price"])), 2),
+            "change_pct": round(float(q.get("changesPercentage", 0)), 2),
             "name": q.get("name", symbol),
         }
     except Exception as e:
@@ -85,7 +86,7 @@ def build_field(index_symbol, vol_symbol=None, vol_range=(10, 80)):
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "0.7", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "0.8", "status": "live"}
 
 @app.get("/api/market/us")
 def get_us_market():
@@ -109,12 +110,11 @@ def get_all_markets():
 
 @app.get("/api/debug")
 def debug():
-    """Test with plain US ETF symbols — most likely to work on free tier."""
     raw = {}
-    for sym in ["SPY", "EWU", "INDA", "UVXY", "QQQ"]:
+    for sym in ["SPY", "EWU", "INDA", "UVXY"]:
         try:
-            r = httpx.get(f"{FMP_BASE}/quote/{sym}", headers={"apikey": FMP_KEY}, timeout=10)
+            r = httpx.get(f"{FMP_BASE}/quote", params={"symbol": sym, "apikey": FMP_KEY}, timeout=10)
             raw[sym] = r.json()
         except Exception as e:
             raw[sym] = str(e)
-    return {"key_set": bool(FMP_KEY), "raw": raw}
+    return {"key_set": bool(FMP_KEY), "endpoint": FMP_BASE, "raw": raw}
