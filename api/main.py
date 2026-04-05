@@ -19,10 +19,11 @@ CACHE_TTL = 900  # 15 minutes
 
 def cached(key, fn):
     now = time.time()
-    if key in _cache and now - _cache[key]["ts"] < CACHE_TTL:
+    if key in _cache and _cache[key]["data"] is not None and now - _cache[key]["ts"] < CACHE_TTL:
         return _cache[key]["data"]
     data = fn()
-    _cache[key] = {"data": data, "ts": now}
+    if data is not None:
+        _cache[key] = {"data": data, "ts": now}
     return data
 
 def fetch_vix():
@@ -60,7 +61,7 @@ def get_vix():
 
 def fetch_index(ticker_symbol, vol_symbol=None, vol_range=(10, 80)):
     """Generic index fetcher — returns normalised field_value and metadata."""
-    idx = yf.Ticker(ticker_symbol).history(period="5d")
+    idx = yf.Ticker(ticker_symbol).history(period="10d")
     if idx.empty:
         return None
     closes = idx["Close"].tolist()
@@ -71,7 +72,7 @@ def fetch_index(ticker_symbol, vol_symbol=None, vol_range=(10, 80)):
     vol_data = None
     vol_norm = 0.5
     if vol_symbol:
-        vol = yf.Ticker(vol_symbol).history(period="5d")
+        vol = yf.Ticker(vol_symbol).history(period="10d")
         if not vol.empty:
             vc = vol["Close"].tolist()
             vraw = round(vc[-1], 2)
