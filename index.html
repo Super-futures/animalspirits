@@ -649,14 +649,16 @@ const GDELT_QUERIES = {
   constraint: {us:'budget cuts debt bankruptcy frugal',          uk:'austerity budget food bank debt',    india:'budget savings debt frugal austerity'},
 };
 
-async function fetchGDELT(region, cluster) {
-  // route via Render proxy — Safari blocks direct GDELT calls
+async function fetchGDELT(cluster) {
+  // fetch active cluster across all regions in one call
   try {
-    const res = await fetch(`${API_URL}/api/gdelt/${region}/${cluster}`);
+    const res = await fetch(`${API_URL}/api/gdelt/cluster/${cluster}`);
     if (!res.ok) return null;
-    return await res.json();
+    const d = await res.json();
+    // returns {us: {...}, uk: {...}, india: {...}}
+    return d;
   } catch(e) {
-    console.warn('GDELT fetch failed', region, cluster, e.message);
+    console.warn('GDELT fetch failed', cluster, e.message);
     return null;
   }
 }
@@ -708,14 +710,31 @@ async function fetchAllSentiment() {
 }
 
 async function fetchAllNarrative() {
+  // fetch active cluster only — respects GDELT rate limit
+  // background: fetch remaining clusters after initial load
+  const activeResult = await fetchGDELT(sc);
+  if (!activeResult) return null;
+  // reshape to {region: {cluster: data}} format
   const result = {};
   for (const region of ['us','uk','india']) {
     result[region] = {};
-    for (const cluster of ['anxiety','confidence','aspiration','constraint']) {
-      result[region][cluster] = await fetchGDELT(region, cluster);
-      await new Promise(res => setTimeout(res, 200));
+    if (activeResult[region]) {
+      result[region][sc] = activeResult[region];
     }
   }
+  // schedule background fetch of other clusters (non-blocking)
+  setTimeout(async () => {
+    for (const cluster of ['anxiety','confidence','aspiration','constraint']) {
+      if (cluster === sc) continue;
+      const r = await fetchGDELT(cluster);
+      if (r && window.liveNarrative) {
+        for (const region of ['us','uk','india']) {
+          if (r[region]) window.liveNarrative[region][cluster] = r[region];
+        }
+      }
+      await new Promise(res => setTimeout(res, 500));
+    }
+  }, 5000);
   return result;
 }
 
