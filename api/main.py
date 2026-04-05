@@ -182,7 +182,7 @@ def fetch_gdelt(region, cluster):
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "1.7", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "1.8", "status": "live"}
 
 @app.get("/api/market/all")
 def get_market_all():
@@ -249,13 +249,38 @@ def gdelt_proxy(region: str, cluster: str):
 
 @app.get("/api/gdelt/all")
 def gdelt_all():
+    # fetch all 12 combinations sequentially with 6s gap to respect rate limit
+    # cached for 15min so only runs once per window
     result = {}
     for r in ["us","uk","india"]:
         result[r] = {}
         for c in ["anxiety","confidence","aspiration","constraint"]:
             key = f"gdelt_{r}_{c}"
-            result[r][c] = cached(key, lambda rr=r, cc=c: fetch_gdelt(rr, cc))
-            time.sleep(0.3)
+            if key in _cache and _cache[key]["data"] is not None:
+                result[r][c] = _cache[key]["data"]
+            else:
+                data = fetch_gdelt(r, c)
+                if data is not None:
+                    _cache[key] = {"data": data, "ts": time.time()}
+                result[r][c] = data
+                time.sleep(6)  # respect GDELT 5s rate limit
+    return result
+
+@app.get("/api/gdelt/cluster/{cluster}")
+def gdelt_by_cluster(cluster: str):
+    # fetch one cluster across all regions — 3 calls, 18s total
+    # used by frontend to fetch active cluster only
+    result = {}
+    for r in ["us","uk","india"]:
+        key = f"gdelt_{r}_{cluster}"
+        if key in _cache and _cache[key]["data"] is not None:
+            result[r] = _cache[key]["data"]
+        else:
+            data = fetch_gdelt(r, cluster)
+            if data is not None:
+                _cache[key] = {"data": data, "ts": time.time()}
+            result[r] = data
+            time.sleep(6)
     return result
 
 @app.get("/api/debug")
@@ -272,9 +297,9 @@ def debug():
     except Exception as e:
         gdelt_raw = {"error": str(e)}
     return {
-        "version": "1.7",
+        "version": "1.8",
         "market": {"spx": fetch_yf("%5EGSPC"), "ftse": fetch_yf("%5EFTSE")},
         "sentiment": fetch_sentiment("us", "anxiety"),
-        "narrative": fetch_gdelt("us", "anxiety"),
+        "narrative": "see /api/gdelt/us/anxiety",
         "gdelt_raw": gdelt_raw,
     }
