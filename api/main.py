@@ -108,35 +108,60 @@ def build_field(index_data, vol_data=None, vol_range=(10, 80)):
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "1.1", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "1.3", "status": "live"}
+
+def fetch_yf_retry(ticker, retries=2):
+    for _ in range(retries):
+        result = fetch_yf(ticker)
+        if result is not None:
+            return result
+        time.sleep(0.5)
+    return None
 
 @app.get("/api/market/us")
 def get_us():
-    return cached("us", lambda: build_field(fetch_yf("%5EGSPC"), fetch_yf("%5EVIX"), (10, 80)))
+    return cached("us", lambda: build_field(fetch_yf_retry("%5EGSPC"), fetch_yf_retry("%5EVIX"), (10, 80)))
 
 @app.get("/api/market/uk")
 def get_uk():
-    return cached("uk", lambda: build_field(fetch_yf("%5EFTSE"), None, (10, 60)))
+    return cached("uk", lambda: build_field(fetch_yf_retry("%5EFTSE"), None, (10, 60)))
 
 @app.get("/api/market/india")
 def get_india():
-    return cached("india", lambda: build_field(fetch_yf("%5ENSEI"), None, (10, 60)))
+    return cached("india", lambda: build_field(fetch_yf_retry("%5ENSEI"), fetch_yf_retry("%5EINDIAVIX"), (10, 60)))
 
 @app.get("/api/market/all")
 def get_all():
-    return {
-        "us":    cached("us",    lambda: build_field(fetch_yf("%5EGSPC"), fetch_yf("%5EVIX"), (10, 80))),
-        "uk":    cached("uk",    lambda: build_field(fetch_yf("%5EFTSE"), None, (10, 60))),
-        "india": cached("india", lambda: build_field(fetch_yf("%5ENSEI"), None, (10, 60))),
-    }
+    # fetch sequentially with delays to avoid rate limiting
+    def fetch_us():
+        spx = fetch_yf_retry("%5EGSPC")
+        time.sleep(0.8)
+        vix = fetch_yf_retry("%5EVIX")
+        return build_field(spx, vix, (10, 80))
+    def fetch_uk():
+        time.sleep(0.4)
+        return build_field(fetch_yf_retry("%5EFTSE"), None, (10, 60))
+    def fetch_india():
+        time.sleep(0.4)
+        nsei = fetch_yf_retry("%5ENSEI")
+        time.sleep(0.4)
+        ivix = fetch_yf_retry("%5EINDIAVIX")
+        return build_field(nsei, ivix, (10, 60))
+
+    us    = cached("us",    fetch_us)
+    time.sleep(0.5)
+    uk    = cached("uk",    fetch_uk)
+    time.sleep(0.5)
+    india = cached("india", fetch_india)
+    return {"us": us, "uk": uk, "india": india}
 
 @app.get("/api/debug")
 def debug():
     results = {}
     for sym, label in [
         ("%5EGSPC","spx"), ("%5EFTSE","ftse"),
-        ("%5ENSEI","nsei"), ("%5BNSEI","nsei_alt"),
-        ("%5EVIX","vix"), ("%5EINDIAVIX","indiavix"),
+        ("%5ENSEI","nsei"), ("%5EVIX","vix"),
+        ("%5EINDIAVIX","indiavix"),
     ]:
-        results[label] = fetch_yf(sym)
-    return {"version": "1.1", "results": results}
+        results[label] = fetch_yf_retry(sym)
+    return {"version": "1.3", "results": results}
