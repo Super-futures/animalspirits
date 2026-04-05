@@ -14,7 +14,7 @@ app.add_middleware(
 )
 
 _cache = {}
-CACHE_TTL = 900  # 15 minutes
+CACHE_TTL = 900
 AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
 AV_BASE = "https://www.alphavantage.co/query"
 
@@ -28,7 +28,6 @@ def cached(key, fn):
     return data
 
 def fetch_quote(symbol):
-    """Fetch latest quote from Alpha Vantage — GLOBAL_QUOTE endpoint."""
     try:
         r = httpx.get(AV_BASE, params={
             "function": "GLOBAL_QUOTE",
@@ -38,6 +37,7 @@ def fetch_quote(symbol):
         data = r.json()
         q = data.get("Global Quote", {})
         if not q or not q.get("05. price"):
+            print(f"Empty quote for {symbol}: {data}")
             return None
         price = float(q["05. price"])
         change_pct = float(q["10. change percent"].replace("%", ""))
@@ -53,14 +53,11 @@ def fetch_quote(symbol):
         return None
 
 def build_field(index_symbol, vol_symbol=None, vol_range=(10, 80)):
-    """Build a market field value from index + optional volatility."""
     idx = fetch_quote(index_symbol)
     if not idx:
         return None
-
     change_pct = idx["change_pct"]
     idx_norm = round(min(max((change_pct + 3) / 6, 0), 1), 3)
-
     vol_data = None
     vol_norm = 0.5
     if vol_symbol:
@@ -74,7 +71,6 @@ def build_field(index_symbol, vol_symbol=None, vol_range=(10, 80)):
                 "symbol": vol_symbol,
                 "source": f"Alpha Vantage — {vol_symbol}",
             }
-
     return {
         "index": {
             "symbol": index_symbol,
@@ -91,7 +87,7 @@ def build_field(index_symbol, vol_symbol=None, vol_range=(10, 80)):
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "0.3", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "0.4", "status": "live"}
 
 @app.get("/api/market/us")
 def get_us_market():
@@ -99,22 +95,31 @@ def get_us_market():
 
 @app.get("/api/market/uk")
 def get_uk_market():
-    return cached("uk_market", lambda: build_field("ISF.L", vol_range=(10, 60)))
+    return cached("uk_market", lambda: build_field("EWU", vol_range=(10, 60)))
 
 @app.get("/api/market/india")
 def get_india_market():
-    return cached("india_market", lambda: build_field("NIFTYBEES.BSE", vol_range=(10, 60)))
+    return cached("india_market", lambda: build_field("INDA", vol_range=(10, 60)))
 
 @app.get("/api/market/all")
 def get_all_markets():
     return {
-        "us":    cached("us_market",    lambda: build_field("SPY",           vol_symbol="VIXY", vol_range=(10, 80))),
-        "uk":    cached("uk_market",    lambda: build_field("ISF.L",                            vol_range=(10, 60))),
-        "india": cached("india_market", lambda: build_field("NIFTYBEES.BSE",                    vol_range=(10, 60))),
+        "us":    cached("us_market",    lambda: build_field("SPY",  vol_symbol="VIXY", vol_range=(10, 80))),
+        "uk":    cached("uk_market",    lambda: build_field("EWU",                     vol_range=(10, 60))),
+        "india": cached("india_market", lambda: build_field("INDA",                    vol_range=(10, 60))),
     }
 
 @app.get("/api/debug")
 def debug():
-    """Test Alpha Vantage connectivity."""
-    result = fetch_quote("SPY")
-    return {"spy": result, "key_set": bool(AV_KEY)}
+    """Test AV with multiple symbols to find what works."""
+    results = {}
+    for sym in ["SPY", "IBM", "AAPL", "EWU", "INDA", "VIXY"]:
+        r = httpx.get(AV_BASE, params={
+            "function": "GLOBAL_QUOTE",
+            "symbol": sym,
+            "apikey": AV_KEY,
+        }, timeout=10)
+        d = r.json()
+        q = d.get("Global Quote", {})
+        results[sym] = q.get("05. price", "empty") if q else str(d)
+    return {"key_set": bool(AV_KEY), "results": results}
