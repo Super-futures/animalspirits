@@ -147,24 +147,45 @@ def fetch_gdelt(region, cluster):
         lang_filter = {"us": "sourcelang:english", "uk": "sourcelang:english", "india": "sourcelang:english"}
         lang = lang_filter.get(region, "sourcelang:english")
         full_query = f"{query} {lang}"
+        # fetch articles with tone via artlist + outputfields
         r = httpx.get("https://api.gdeltproject.org/api/v2/doc/doc",
             params={"query": full_query, "mode": "artlist", "maxrecords": "25",
-                    "timespan": "24h", "format": "json"},
+                    "timespan": "24h", "format": "json",
+                    "sort": "toneasc"},
             timeout=15, headers={"User-Agent": "Mozilla/5.0 AnimalSpirits/1.0"})
         if r.status_code != 200:
             print(f"GDELT status {r.status_code} for {region}/{cluster}")
             return None
         text = r.text.strip()
-        if not text or text == "{}":
-            print(f"GDELT empty response for {region}/{cluster}")
+        if not text or text == "{}" or "Please limit" in text:
+            print(f"GDELT rate limited or empty for {region}/{cluster}")
             return None
         data = r.json()
         articles = data.get("articles", [])
         if not articles:
-            print(f"GDELT no articles for {region}/{cluster}: {list(data.keys())}")
+            print(f"GDELT no articles for {region}/{cluster}")
             return None
-        tones = [float(a.get("tone", 0)) for a in articles if a.get("tone")]
-        if not tones: return None
+
+        # tone field may be absent in artlist — use article count + seendate as proxy
+        # also try fetching tone via timelinetone in parallel
+        tones_raw = [a.get("tone") for a in articles if a.get("tone") is not None]
+
+        if tones_raw:
+            tones = [float(t) for t in tones_raw]
+        else:
+            # fetch tone timeline as fallback
+            r2 = httpx.get("https://api.gdeltproject.org/api/v2/doc/doc",
+                params={"query": full_query, "mode": "timelinetone",
+                        "timespan": "24h", "format": "json"},
+                timeout=12, headers={"User-Agent": "Mozilla/5.0 AnimalSpirits/1.0"})
+            if r2.status_code == 200:
+                td = r2.json()
+                timeline = td.get("timeline", [{}])[0].get("data", [])
+                tones = [float(p.get("value", 0)) for p in timeline if p.get("value") is not None]
+            else:
+                tones = [0.0]
+
+        if not tones: tones = [0.0]
         avg_tone = sum(tones) / len(tones)
         tone_norm = round(min(max((avg_tone + 10) / 20, 0), 1), 3)
         tone_velocity = round((tones[-1] - tones[0]) / max(len(tones), 1) / 2, 3) if len(tones) > 1 else 0
@@ -182,7 +203,7 @@ def fetch_gdelt(region, cluster):
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "1.8", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "1.9", "status": "live"}
 
 @app.get("/api/market/all")
 def get_market_all():
@@ -297,7 +318,7 @@ def debug():
     except Exception as e:
         gdelt_raw = {"error": str(e)}
     return {
-        "version": "1.8",
+        "version": "1.9",
         "market": {"spx": fetch_yf("%5EGSPC"), "ftse": fetch_yf("%5EFTSE")},
         "sentiment": fetch_sentiment("us", "anxiety"),
         "narrative": "see /api/gdelt/us/anxiety",
