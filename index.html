@@ -610,63 +610,140 @@ function updateTime(){
     now.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
 }
 
-// ── Live data pipeline — Render proxy ───────────────────────
+// ── Live data pipeline — three axes ─────────────────────────
 const API_URL = 'https://animalspirits-api.onrender.com';
 window.liveMarkets = null;
+window.liveSentiment = null;
+window.liveNarrative = null;
 let apiStatus = 'loading';
+let liveAxes = 0;
+
+
+
+async function safeFetch(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) {
+    console.warn('fetch failed', url, e.message);
+    return null;
+  }
+}
+
+// axis status — tracks each independently
+const axisStatus = { market: false, sentiment: false, narrative: false };
 
 function updateAPIBadge() {
   const badge = document.getElementById('api-badge');
   if (!badge) return;
-  const states = {
-    'loading':  { text: 'connecting...',  color: 'var(--text3)' },
-    'live':     { text: '● live data',   color: '#4A8C5C' },
-    'partial':  { text: '◑ partial data',color: '#B5883A' },
-    'error':    { text: 'simulated data', color: 'var(--text3)' },
-  };
-  const s = states[apiStatus] || states['error'];
-  badge.textContent = s.text;
-  badge.style.color = s.color;
+  const m = axisStatus.market    ? 'M●' : 'M○';
+  const s = axisStatus.sentiment ? 'S●' : 'S○';
+  const n = axisStatus.narrative ? 'N●' : 'N○';
+  const anyLive = axisStatus.market || axisStatus.sentiment || axisStatus.narrative;
+  badge.innerHTML = `<span style="color:${axisStatus.market?'#4A8C5C':'var(--text3)'}">${m}</span> <span style="color:${axisStatus.sentiment?'#E8803A':'var(--text3)'}">${s}</span> <span style="color:${axisStatus.narrative?'#A855C8':'var(--text3)'}">${n}</span>`;
+  badge.title = `Market: ${axisStatus.market?'live':'simulated'} · Sentiment: ${axisStatus.sentiment?'live':'simulated'} · Narrative: ${axisStatus.narrative?'live':'simulated'}`;
 }
 
-function r2(v) { return Math.round(v * 100) / 100; }
-
-function buildField(d) {
-  if (!d) return null;
-  return d;
+async function fetchWithWake(url, maxWaitMs=90000) {
+  // try immediately first
+  try {
+    const r = await fetch(url);
+    if (r.ok) return await r.json();
+  } catch(e) {}
+  // wake Render then retry every 12s
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    await new Promise(res => setTimeout(res, 12000));
+    try {
+      const r = await fetch(url);
+      if (r.ok) return await r.json();
+    } catch(e) {}
+  }
+  return null;
 }
 
 async function fetchLiveData() {
-  try {
-    const res = await fetch(API_URL + '/api/market/all');
-    if (!res.ok) throw new Error('non-200');
-    const d = await res.json();
-    const liveCount = Object.values(d).filter(v => v !== null).length;
-    if (liveCount === 0) throw new Error('all null');
-    window.liveMarkets = d;
-    apiStatus = liveCount === 3 ? 'live' : 'partial';
-    updateAPIBadge();
-    panels(); draw();
-  } catch(e) {
-    apiStatus = 'error';
-    updateAPIBadge();
-    console.warn('API unavailable — using simulated data:', e.message);
+  const badge = document.getElementById('api-badge');
+  if (badge) { badge.textContent = 'connecting...'; badge.style.color = 'var(--text3)'; }
+
+  // fetch market first — fastest, most important
+  const mkt = await fetchWithWake(API_URL + '/api/market/all', 90000);
+  if (mkt && Object.values(mkt).some(v => v !== null)) {
+    window.liveMarkets = mkt;
+    axisStatus.market = true;
+    updateAPIBadge(); panels(); draw();
   }
+
+  // then sentiment and narrative in parallel
+  const [sentRes, narrRes] = await Promise.allSettled([
+    safeFetch(API_URL + '/api/sentiment/all'),
+    safeFetch(API_URL + '/api/narrative/all'),
+  ]);
+
+  const sent = sentRes.status === 'fulfilled' ? sentRes.value : null;
+  const narr = narrRes.status === 'fulfilled' ? narrRes.value : null;
+
+  if (sent && Object.values(sent).some(v => Object.values(v).some(Boolean))) {
+    window.liveSentiment = sent;
+    axisStatus.sentiment = true;
+  }
+  if (narr && Object.values(narr).some(v => Object.values(v).some(Boolean))) {
+    window.liveNarrative = narr;
+    axisStatus.narrative = true;
+  }
+
+  updateAPIBadge(); panels(); draw();
 }
 
 // gd() — live-aware wrapper around gdSim()
 function gd(ri) {
   const result = gdSim(ri);
   const regionId = ['us','uk','india'][ri];
-  const liveData = window.liveMarkets && window.liveMarkets[regionId];
-  if (liveData && liveData.field_value != null) {
+
+  // inject live market axis
+  const mkt = window.liveMarkets && window.liveMarkets[regionId];
+  if (mkt && mkt.field_value != null) {
     ['anxiety','confidence','aspiration','constraint'].forEach(cl => {
       if (result[cl]) {
-        result[cl].mv = liveData.field_value;
-        result[cl].mc = liveData.confidence || 0.85;
+        result[cl].mv = mkt.field_value;
+        result[cl].mc = mkt.confidence || 0.85;
       }
     });
   }
+
+  // inject live sentiment axis
+  const sent = window.liveSentiment && window.liveSentiment[regionId];
+  if (sent) {
+    ['anxiety','confidence','aspiration','constraint'].forEach(cl => {
+      const s = sent[cl];
+      if (s && s.value != null && result[cl]) {
+        result[cl].sv = s.value;
+        result[cl].sc2 = s.confidence || 0.72;
+      }
+    });
+  }
+
+  // inject live narrative axis
+  const narr = window.liveNarrative && window.liveNarrative[regionId];
+  if (narr) {
+    ['anxiety','confidence','aspiration','constraint'].forEach(cl => {
+      const n = narr[cl];
+      if (n && result[cl]) {
+        result[cl].nv  = Math.min(Math.max((n.tone_normalised || 0.5), 0), 1);
+        result[cl].nvel = n.velocity || 0;
+        result[cl].nc  = n.confidence || 0.75;
+        if (n.dominant_headline) {
+          result[cl].themes = [{
+            label: n.dominant_headline.substring(0, 60),
+            volume: n.tone_normalised || 0.5,
+            velocity: n.velocity || 0,
+          }, ...result[cl].themes.slice(0,2)];
+        }
+      }
+    });
+  }
+
   return result;
 }
 // ─────────────────────────────────────────────────────────────
