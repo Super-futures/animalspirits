@@ -637,9 +637,12 @@ function updateAPIBadge() {
 
 async function fetchYF(ticker) {
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
     const r = await fetch(`${YF_BASE}${ticker}?range=5d&interval=1d`, {
-      signal: AbortSignal.timeout(8000)
+      signal: controller.signal
     });
+    clearTimeout(timer);
     const d = await r.json();
     const meta = d?.chart?.result?.[0]?.meta;
     const closes = d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v => v != null);
