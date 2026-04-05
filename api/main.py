@@ -182,7 +182,7 @@ def fetch_gdelt(region, cluster):
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "1.5", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "1.7", "status": "live"}
 
 @app.get("/api/market/all")
 def get_market_all():
@@ -242,11 +242,39 @@ def get_all():
         "narrative": get_narrative_all(),
     }
 
+@app.get("/api/gdelt/{region}/{cluster}")
+def gdelt_proxy(region: str, cluster: str):
+    key = f"gdelt_{region}_{cluster}"
+    return cached(key, lambda: fetch_gdelt(region, cluster))
+
+@app.get("/api/gdelt/all")
+def gdelt_all():
+    result = {}
+    for r in ["us","uk","india"]:
+        result[r] = {}
+        for c in ["anxiety","confidence","aspiration","constraint"]:
+            key = f"gdelt_{r}_{c}"
+            result[r][c] = cached(key, lambda rr=r, cc=c: fetch_gdelt(rr, cc))
+            time.sleep(0.3)
+    return result
+
 @app.get("/api/debug")
 def debug():
+    # raw GDELT test
+    gdelt_raw = None
+    try:
+        r = httpx.get("https://api.gdeltproject.org/api/v2/doc/doc",
+            params={"query": "economy recession sourcelang:english",
+                    "mode": "artlist", "maxrecords": "5",
+                    "timespan": "24h", "format": "json"},
+            timeout=15, headers={"User-Agent": "Mozilla/5.0 AnimalSpirits/1.0"})
+        gdelt_raw = {"status": r.status_code, "length": len(r.text), "preview": r.text[:300]}
+    except Exception as e:
+        gdelt_raw = {"error": str(e)}
     return {
-        "version": "1.5",
+        "version": "1.7",
         "market": {"spx": fetch_yf("%5EGSPC"), "ftse": fetch_yf("%5EFTSE")},
         "sentiment": fetch_sentiment("us", "anxiety"),
         "narrative": fetch_gdelt("us", "anxiety"),
+        "gdelt_raw": gdelt_raw,
     }
