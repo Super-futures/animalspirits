@@ -90,7 +90,7 @@ def root():
 
 @app.get("/api/market/us")
 def get_us_market():
-    return cached("us_market", lambda: build_field("SPY", vol_symbol="UVXY", vol_range=(5, 40)))
+    return cached("us_market", lambda: build_field("SPY", vol_range=(10, 80)))
 
 @app.get("/api/market/uk")
 def get_uk_market():
@@ -103,7 +103,7 @@ def get_india_market():
 @app.get("/api/market/all")
 def get_all_markets():
     return {
-        "us":    cached("us_market",    lambda: build_field("SPY",  vol_symbol="UVXY", vol_range=(5, 40))),
+        "us":    cached("us_market",    lambda: build_field("SPY", vol_range=(10, 80))),
         "uk":    cached("uk_market",    lambda: build_field("EWU",                     vol_range=(10, 60))),
         "india": cached("india_market", lambda: build_field("INDA",                    vol_range=(10, 60))),
     }
@@ -111,10 +111,21 @@ def get_all_markets():
 @app.get("/api/debug")
 def debug():
     raw = {}
-    for sym in ["SPY", "EWU", "INDA", "UVXY"]:
+    # test UK proxies
+    uk_syms = ["EWU", "FLGB", "HEWG", "FEZ", "VGK"]
+    # test India proxies  
+    india_syms = ["INDA", "PIN", "SMIN", "INDY", "NFTY"]
+    # test vol proxies
+    vol_syms = ["UVXY", "VIXY", "VXX", "SVXY"]
+    for sym in ["SPY"] + uk_syms + india_syms + vol_syms:
         try:
             r = httpx.get(f"{FMP_BASE}/quote", params={"symbol": sym, "apikey": FMP_KEY}, timeout=10)
-            raw[sym] = r.json()
+            text = r.text.strip()
+            if text and text != "[]" and text != "":
+                data = r.json()
+                raw[sym] = data[0]["price"] if isinstance(data, list) and data else "empty"
+            else:
+                raw[sym] = "empty"
         except Exception as e:
-            raw[sym] = str(e)
-    return {"key_set": bool(FMP_KEY), "endpoint": FMP_BASE, "raw": raw}
+            raw[sym] = f"error: {str(e)[:50]}"
+    return {"key_set": bool(FMP_KEY), "results": raw}
