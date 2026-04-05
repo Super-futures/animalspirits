@@ -611,7 +611,7 @@ function updateTime(){
 }
 
 // ── Live data pipeline ──────────────────────────────────────
-let API_URL = localStorage.getItem('as_api_url') || null;
+const API_URL = 'https://animalspirits-api.onrender.com';
 let liveUSMarket = null;
 window.liveMarkets = null;
 let apiStatus = 'unconfigured';
@@ -627,15 +627,15 @@ function updateAPIBadge() {
   const s = states[apiStatus] || states['unconfigured'];
   badge.textContent = s.text;
   badge.style.color = s.color;
-  badge.title = API_URL || 'No API configured — click to configure';
 }
 
 async function fetchLiveData() {
-  if (!API_URL) return;
   try {
     const r = await fetch(API_URL + '/api/market/all', { signal: AbortSignal.timeout(12000) });
     if (!r.ok) throw new Error('non-200');
     const d = await r.json();
+    const hasData = d && (d.us || d.uk || d.india);
+    if (!hasData) throw new Error('null data');
     window.liveMarkets = d;
     apiStatus = 'live';
     updateAPIBadge();
@@ -644,17 +644,6 @@ async function fetchLiveData() {
     apiStatus = 'error';
     updateAPIBadge();
     console.warn('Animal Spirits API unavailable — using simulated data');
-  }
-}
-
-function promptForAPI() {
-  const url = prompt(
-    'Animal Spirits — Live Data\n\nEnter your Render API URL\n(e.g. https://animal-spirits-api.onrender.com)\n\nLeave blank to continue with simulated data.'
-  );
-  if (url && url.startsWith('http')) {
-    localStorage.setItem('as_api_url', url.trim());
-    API_URL = url.trim();
-    fetchLiveData();
   }
 }
 
@@ -691,31 +680,10 @@ setInterval(()=>{
 }, 2800);
 window.addEventListener('resize', ()=>setTimeout(draw, 60));
 
-// API badge interaction
-const _badge = document.getElementById('api-badge');
-if (_badge) {
-  _badge.style.cursor = 'pointer';
-  _badge.addEventListener('click', ()=>{
-    const reset = confirm('Reset API URL?\n\nCurrent: ' + (API_URL || 'none') + '\n\nClick OK to enter a new URL.');
-    if (reset) {
-      localStorage.removeItem('as_api_url');
-      API_URL = null; liveUSMarket = null; apiStatus = 'unconfigured';
-      updateAPIBadge();
-      promptForAPI();
-    }
-  });
-}
-
 updateAPIBadge();
 setTimeout(draw, 120);
-
-// first load — prompt for API after short delay
-if (!API_URL) {
-  setTimeout(promptForAPI, 1800);
-} else {
-  fetchLiveData();
-  setInterval(fetchLiveData, 15 * 60 * 1000);
-}
+fetchLiveData();
+setInterval(fetchLiveData, 15 * 60 * 1000);
 </script>
 </body>
 </html>
