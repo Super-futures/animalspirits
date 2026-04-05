@@ -1,9 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import yfinance as yf
+import httpx
+import os
 import time
-from datetime import datetime, timedelta
 
 app = FastAPI()
 
@@ -16,6 +15,8 @@ app.add_middleware(
 
 _cache = {}
 CACHE_TTL = 900  # 15 minutes
+AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
+AV_BASE = "https://www.alphavantage.co/query"
 
 def cached(key, fn):
     now = time.time()
@@ -26,110 +27,94 @@ def cached(key, fn):
         _cache[key] = {"data": data, "ts": now}
     return data
 
-def fetch_index(ticker_symbol, vol_symbol=None, vol_range=(10, 80)):
-    """Robust index fetcher with fallback strategies."""
+def fetch_quote(symbol):
+    """Fetch latest quote from Alpha Vantage — GLOBAL_QUOTE endpoint."""
     try:
-        end = datetime.today()
-        start = end - timedelta(days=30)
-        
-        ticker = yf.Ticker(ticker_symbol)
-        # try download first — more reliable than history()
-        df = yf.download(ticker_symbol, start=start.strftime("%Y-%m-%d"), 
-                        end=end.strftime("%Y-%m-%d"), progress=False, auto_adjust=True)
-        
-        if df.empty:
-            # fallback to history()
-            df = ticker.history(period="1mo")
-        
-        if df.empty:
+        r = httpx.get(AV_BASE, params={
+            "function": "GLOBAL_QUOTE",
+            "symbol": symbol,
+            "apikey": AV_KEY,
+        }, timeout=10)
+        data = r.json()
+        q = data.get("Global Quote", {})
+        if not q or not q.get("05. price"):
             return None
-
-        closes = df["Close"].dropna().tolist()
-        if len(closes) < 2:
-            return None
-
-        # flatten if nested (yf.download returns MultiIndex sometimes)
-        if hasattr(closes[0], '__len__'):
-            closes = [float(c[0]) if hasattr(c, '__len__') else float(c) for c in closes]
-
-        current = round(float(closes[-1]), 2)
-        change_pct = round((float(closes[-1]) - float(closes[-2])) / float(closes[-2]) * 100, 2)
-        idx_norm = round(min(max((change_pct + 3) / 6, 0), 1), 3)
-
-        vol_data = None
-        vol_norm = 0.5
-        if vol_symbol:
-            try:
-                vdf = yf.download(vol_symbol, start=start.strftime("%Y-%m-%d"),
-                                 end=end.strftime("%Y-%m-%d"), progress=False, auto_adjust=True)
-                if vdf.empty:
-                    vdf = yf.Ticker(vol_symbol).history(period="1mo")
-                if not vdf.empty:
-                    vc = vdf["Close"].dropna().tolist()
-                    if vc:
-                        vraw = round(float(vc[-1]), 2)
-                        vol_norm = round(min(max((vraw - vol_range[0]) / (vol_range[1] - vol_range[0]), 0), 1), 3)
-                        vol_data = {
-                            "raw": vraw,
-                            "normalised": vol_norm,
-                            "series": [round(float(v), 2) for v in vc[-10:]],
-                            "source": f"Yahoo Finance — {vol_symbol}",
-                        }
-            except Exception as e:
-                print(f"Vol fetch error {vol_symbol}: {e}")
-
+        price = float(q["05. price"])
+        change_pct = float(q["10. change percent"].replace("%", ""))
+        prev = float(q["08. previous close"])
         return {
-            "index": {
-                "ticker": ticker_symbol,
-                "current": current,
-                "change_pct": change_pct,
-                "normalised": idx_norm,
-                "series": [round(float(v), 2) for v in closes[-10:]],
-            },
-            "volatility": vol_data,
-            "field_value": round(vol_norm * 0.7 + (1 - idx_norm) * 0.3, 3),
-            "confidence": 0.85 if vol_data else 0.65,
-            "source": "Yahoo Finance",
-            "lag_days": 0,
+            "symbol": symbol,
+            "current": round(price, 2),
+            "prev": round(prev, 2),
+            "change_pct": round(change_pct, 2),
         }
     except Exception as e:
-        print(f"fetch_index error {ticker_symbol}: {e}")
+        print(f"fetch_quote error {symbol}: {e}")
         return None
+
+def build_field(index_symbol, vol_symbol=None, vol_range=(10, 80)):
+    """Build a market field value from index + optional volatility."""
+    idx = fetch_quote(index_symbol)
+    if not idx:
+        return None
+
+    change_pct = idx["change_pct"]
+    idx_norm = round(min(max((change_pct + 3) / 6, 0), 1), 3)
+
+    vol_data = None
+    vol_norm = 0.5
+    if vol_symbol:
+        vol = fetch_quote(vol_symbol)
+        if vol:
+            vraw = vol["current"]
+            vol_norm = round(min(max((vraw - vol_range[0]) / (vol_range[1] - vol_range[0]), 0), 1), 3)
+            vol_data = {
+                "raw": vraw,
+                "normalised": vol_norm,
+                "symbol": vol_symbol,
+                "source": f"Alpha Vantage — {vol_symbol}",
+            }
+
+    return {
+        "index": {
+            "symbol": index_symbol,
+            "current": idx["current"],
+            "change_pct": change_pct,
+            "normalised": idx_norm,
+        },
+        "volatility": vol_data,
+        "field_value": round(vol_norm * 0.7 + (1 - idx_norm) * 0.3, 3),
+        "confidence": 0.85 if vol_data else 0.65,
+        "source": "Alpha Vantage",
+        "lag_days": 0,
+    }
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "0.2", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "0.3", "status": "live"}
 
 @app.get("/api/market/us")
 def get_us_market():
-    return cached("us_market", lambda: fetch_index("^GSPC", vol_symbol="^VIX", vol_range=(10, 80)))
+    return cached("us_market", lambda: build_field("SPY", vol_symbol="VIXY", vol_range=(10, 80)))
 
 @app.get("/api/market/uk")
 def get_uk_market():
-    return cached("uk_market", lambda: fetch_index("^FTSE", vol_symbol="^VFTSE", vol_range=(10, 60)))
+    return cached("uk_market", lambda: build_field("ISF.L", vol_range=(10, 60)))
 
 @app.get("/api/market/india")
 def get_india_market():
-    return cached("india_market", lambda: fetch_index("^NSEI", vol_symbol="^INDIAVIX", vol_range=(10, 60)))
+    return cached("india_market", lambda: build_field("NIFTYBEES.BSE", vol_range=(10, 60)))
 
 @app.get("/api/market/all")
 def get_all_markets():
     return {
-        "us":    cached("us_market",    lambda: fetch_index("^GSPC", vol_symbol="^VIX",      vol_range=(10, 80))),
-        "uk":    cached("uk_market",    lambda: fetch_index("^FTSE", vol_symbol="^VFTSE",    vol_range=(10, 60))),
-        "india": cached("india_market", lambda: fetch_index("^NSEI", vol_symbol="^INDIAVIX", vol_range=(10, 60))),
+        "us":    cached("us_market",    lambda: build_field("SPY",           vol_symbol="VIXY", vol_range=(10, 80))),
+        "uk":    cached("uk_market",    lambda: build_field("ISF.L",                            vol_range=(10, 60))),
+        "india": cached("india_market", lambda: build_field("NIFTYBEES.BSE",                    vol_range=(10, 60))),
     }
 
 @app.get("/api/debug")
 def debug():
-    """Test endpoint — returns raw yfinance data for diagnostics."""
-    try:
-        df = yf.download("^GSPC", period="5d", progress=False)
-        return {
-            "empty": df.empty,
-            "shape": list(df.shape),
-            "columns": list(df.columns.astype(str)),
-            "tail": df.tail(2).to_dict() if not df.empty else {}
-        }
-    except Exception as e:
-        return {"error": str(e)}
+    """Test Alpha Vantage connectivity."""
+    result = fetch_quote("SPY")
+    return {"spy": result, "key_set": bool(AV_KEY)}
