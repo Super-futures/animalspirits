@@ -24,9 +24,9 @@ The name draws on Keynes's original formulation: the spontaneous urge to action 
 
 | Axis | Signal | Visual language | Source |
 |---|---|---|---|
-| Sentiment | Search behaviour | Warm · circular · diffuse | Google Trends |
-| Market | Economic indicators | Cool · rounded-rectangle · defined | Yahoo Finance |
-| Narrative | Story propagation speed and direction | Violet · directional arrows | GDELT |
+| Sentiment | Wikipedia pageview volume for economic terms | Warm · circular · diffuse | Wikimedia Pageviews API |
+| Market | Index price momentum + volatility | Cool · rounded-rectangle · defined | Yahoo Finance |
+| Narrative | News tone, velocity, dominant headline | Violet · directional arrows | GDELT Project |
 
 The spatial offset between sentiment and market blooms encodes temporal lag — when one axis leads the other, the distance between their centres is the reading. Diffusion radius encodes uncertainty: high confidence produces tight, defined blooms; low confidence produces soft, wide fields.
 
@@ -38,13 +38,36 @@ The most analytically significant state: divergent sentiment/market axes combine
 
 ## Regions — v0.1
 
-| Region | Sentiment source | Market indices |
-|---|---|---|
-| United States | Google Trends | VIX, S&P 500 |
-| United Kingdom | Google Trends | FTSE 100 |
-| Seoul | Google Trends (Phase 1) | KOSPI |
+| Region | Sentiment | Market indices | Narrative |
+|---|---|---|---|
+| United States | Wikimedia (English) | S&P 500 + VIX | GDELT (English) |
+| United Kingdom | Wikimedia (English) | FTSE 100 | GDELT (English) |
+| India | Wikimedia (English) | Nifty 50 + India VIX | GDELT (English) |
 
-**Methodological note — Seoul:** Naver is the appropriate search pipeline for Korean sentiment data. Google Trends is used as a Phase 1 proxy with this limitation explicitly declared. Naver integration is staged for a subsequent phase.
+**Methodological note:** Signals are platform-specific and culturally situated. English-language Wikipedia and GDELT coverage skews toward anglophone media and search behaviour. This limitation is declared rather than suppressed — it is part of the instrument's epistemological position. Non-anglophone pipelines (Naver for Korea, vernacular Indian sources) are staged for subsequent phases.
+
+---
+
+## Data sources
+
+| Source | Axis | Coverage | Key |
+|---|---|---|---|
+| [Yahoo Finance](https://finance.yahoo.com) | Market | S&P 500, FTSE 100, Nifty 50, VIX, India VIX | None |
+| [Wikimedia Pageviews API](https://wikimedia.org/api/rest_v1/) | Sentiment | Wikipedia article views by term and language | None |
+| [GDELT Project](https://www.gdeltproject.org) | Narrative | Global news tone, volume, velocity | None |
+| [Google Trends](https://trends.google.com) *(planned)* | Sentiment | Search volume by keyword and region | Alpha access pending |
+
+---
+
+## Live data status
+
+The frontend displays per-axis status in the bottom right:
+
+- `M●` — market axis live · `M○` — simulated
+- `S●` — sentiment axis live · `S○` — simulated
+- `N●` — narrative axis live · `N○` — simulated
+
+The platform runs fully on simulated data if the API is unavailable — no functionality is lost, only the real-world signal.
 
 ---
 
@@ -55,7 +78,7 @@ animal-spirits/
 ├── index.html          # frontend — D3 + Canvas, single file
 ├── README.md
 └── api/
-    ├── main.py         # FastAPI backend
+    ├── main.py         # FastAPI backend — market, sentiment, narrative
     ├── requirements.txt
     ├── render.yaml     # Render deployment config
     └── README.md
@@ -66,7 +89,7 @@ animal-spirits/
 ## Running locally
 
 **Frontend**
-Open `index.html` directly in a browser. Runs fully on simulated data without the API.
+Open `index.html` directly in a browser. Runs on simulated data without the API.
 
 **API**
 ```bash
@@ -74,38 +97,32 @@ cd api
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
-Then open `http://localhost:8000/api/market/us`
+Then open `http://localhost:8000/api/debug`
 
 ---
 
 ## Deploying
 
 **Frontend → GitHub Pages or Netlify**
-Push `index.html` to the repo root. Enable GitHub Pages or connect to Netlify. No build step required.
+Push `index.html` to the repo root. No build step required.
+
+Live at:
+- [animal-spirits.netlify.app](https://animal-spirits.netlify.app)
+- [super-futures.github.io/animalspirits](https://super-futures.github.io/animalspirits)
 
 **API → Render**
-Connect the repo to Render, set the root directory to `api/`. Render reads `render.yaml` automatically. Free tier is sufficient for prototype use.
-
-On first load the frontend will prompt for your Render API URL. This is stored in the browser — you will not be asked again.
-
----
-
-## Data sources
-
-- [Google Trends](https://trends.google.com) via `pytrends`
-- [Yahoo Finance](https://finance.yahoo.com) via `yfinance`
-- [GDELT Project](https://www.gdeltproject.org) — real-time global news with emotional tone scoring
-
----
-
-## Status
-
-v0.7 prototype · simulated data with live market pipeline (VIX + S&P 500) · 3 regions · 3 axes · 4 affect clusters
-
-This is a research prototype and affective observatory. It is not a trading signal engine.
+Connect the repo to Render, set root directory to `api/`. Free tier supported — note that free instances sleep after inactivity and take ~50 seconds to wake. The frontend handles this gracefully, showing `connecting...` while the API wakes.
 
 ---
 
 ## Intellectual context
 
 The project engages Keynes's original formulation of animal spirits, Robert Shiller's narrative economics thesis, and the tradition of data-driven affective mapping in media art and critical design. A research paper formalising the conceptual framework is in preparation.
+
+---
+
+## Status
+
+v0.7 prototype · three live data sources · 3 regions · 3 axes · 4 affect clusters
+
+This is a research prototype and affective observatory. It is not a trading signal engine.
