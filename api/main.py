@@ -143,16 +143,26 @@ GDELT_COUNTRIES = {"us": "US", "uk": "UK", "india": "India"}
 def fetch_gdelt(region, cluster):
     try:
         query = GDELT_QUERIES.get(cluster, {}).get(region, "economy")
-        country = GDELT_COUNTRIES.get(region, "US")
+        # use sourcelang instead of sourcecountry — more reliable
+        lang_filter = {"us": "sourcelang:english", "uk": "sourcelang:english", "india": "sourcelang:english"}
+        lang = lang_filter.get(region, "sourcelang:english")
+        full_query = f"{query} {lang}"
         r = httpx.get("https://api.gdeltproject.org/api/v2/doc/doc",
-            params={"query": f"{query} sourcecountry:{country}",
-                    "mode": "artlist", "maxrecords": "25",
-                    "timespan": "1d", "format": "json"},
-            timeout=12, headers={"User-Agent": "AnimalSpirits/1.0 (research)"})
-        if r.status_code != 200: return None
+            params={"query": full_query, "mode": "artlist", "maxrecords": "25",
+                    "timespan": "24h", "format": "json"},
+            timeout=15, headers={"User-Agent": "Mozilla/5.0 AnimalSpirits/1.0"})
+        if r.status_code != 200:
+            print(f"GDELT status {r.status_code} for {region}/{cluster}")
+            return None
+        text = r.text.strip()
+        if not text or text == "{}":
+            print(f"GDELT empty response for {region}/{cluster}")
+            return None
         data = r.json()
         articles = data.get("articles", [])
-        if not articles: return None
+        if not articles:
+            print(f"GDELT no articles for {region}/{cluster}: {list(data.keys())}")
+            return None
         tones = [float(a.get("tone", 0)) for a in articles if a.get("tone")]
         if not tones: return None
         avg_tone = sum(tones) / len(tones)
@@ -172,7 +182,7 @@ def fetch_gdelt(region, cluster):
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "1.4", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "1.5", "status": "live"}
 
 @app.get("/api/market/all")
 def get_market_all():
@@ -235,7 +245,7 @@ def get_all():
 @app.get("/api/debug")
 def debug():
     return {
-        "version": "1.4",
+        "version": "1.5",
         "market": {"spx": fetch_yf("%5EGSPC"), "ftse": fetch_yf("%5EFTSE")},
         "sentiment": fetch_sentiment("us", "anxiety"),
         "narrative": fetch_gdelt("us", "anxiety"),
