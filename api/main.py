@@ -41,7 +41,7 @@ def fetch_yf(ticker):
         try:
             r = httpx.get(
                 f"{host}/v8/finance/chart/{ticker}",
-                params={"range": "5d", "interval": "1d"},
+                params={"range": "10d", "interval": "1d"},
                 headers={
                     "User-Agent": random.choice(USER_AGENTS),
                     "Accept": "application/json,text/plain,*/*",
@@ -108,7 +108,7 @@ def build_field(index_data, vol_data=None, vol_range=(10, 80)):
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "1.0", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "1.1", "status": "live"}
 
 @app.get("/api/market/us")
 def get_us():
@@ -133,6 +133,10 @@ def get_all():
 @app.get("/api/debug")
 def debug():
     results = {}
-    for sym, label in [("%5EGSPC","spx"), ("%5EFTSE","ftse"), ("%5ENSEI","nsei"), ("%5EVIX","vix")]:
+    for sym, label in [
+        ("%5EGSPC","spx"), ("%5EFTSE","ftse"),
+        ("%5ENSEI","nsei"), ("%5BNSEI","nsei_alt"),
+        ("%5EVIX","vix"), ("%5EINDIAVIX","indiavix"),
+    ]:
         results[label] = fetch_yf(sym)
-    return {"version": "1.0", "results": results}
+    return {"version": "1.1", "results": results}
