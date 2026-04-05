@@ -175,7 +175,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
 const REGIONS=[
   {id:'us',   label:'United States', short:'US',source:'Google Trends + Yahoo Finance + GDELT',note:false,lng:-98,  lat:38,  color:'#4A7FB5'},
   {id:'uk',   label:'United Kingdom',short:'UK',source:'Google Trends + FTSE + GDELT',         note:false,lng:-1.5, lat:52.5,color:'#7B5EA7'},
-  {id:'seoul',label:'Seoul',         short:'KR',source:'Google Trends (Phase 1) + GDELT',       note:true, lng:126.9,lat:37.5,color:'#C97B5A'},
+  {id:'india',label:'India',          short:'IN',source:'Google Trends (anglophone) + GDELT',    note:false,lng:78.9, lat:20.6, color:'#C97B5A'},
 ];
 const CLUSTERS=[
   {id:'anxiety',   label:'anxiety / fear',color:'#C94040',sC:'#E8803A',mC:'#5A7FB5',nC:'#A855C8'},
@@ -199,22 +199,22 @@ const THEMES={
   anxiety:{
     us:[{label:'rate decisions'},{label:'job security'},{label:'market volatility'},{label:'cost of living'}],
     uk:[{label:'cost of living'},{label:'mortgage stress'},{label:'energy prices'}],
-    seoul:[{label:'export slowdown'},{label:'property market'},{label:'tech sector fear'}],
+    india:[{label:'rupee pressure'},{label:'inflation concern'},{label:'job market anxiety'}],
   },
   confidence:{
     us:[{label:'earnings growth'},{label:'soft landing'},{label:'consumer spending'}],
     uk:[{label:'wage growth'},{label:'inflation cooling'},{label:'investment outlook'}],
-    seoul:[{label:'export recovery'},{label:'chip demand'},{label:'consumer rebound'}],
+    india:[{label:'growth outlook'},{label:'startup activity'},{label:'consumer confidence'}],
   },
   aspiration:{
     us:[{label:'luxury travel'},{label:'housing upgrade'},{label:'equity wealth'},{label:'lifestyle shift'}],
     uk:[{label:'summer travel'},{label:'home renovation'},{label:'premium retail'}],
-    seoul:[{label:'overseas travel'},{label:'premium brands'},{label:'lifestyle upgrade'}],
+    india:[{label:'overseas travel'},{label:'premium brands'},{label:'middle class rise'}],
   },
   constraint:{
     us:[{label:'budget shopping'},{label:'debt management'},{label:'side income'}],
     uk:[{label:'food bank demand'},{label:'BNPL usage'},{label:'discount retail'}],
-    seoul:[{label:'frugal living'},{label:'second-hand market'},{label:'expense cutting'}],
+    india:[{label:'expense cutting'},{label:'value retail'},{label:'debt pressure'}],
   },
 };
 const FOOTER_TEXT={
@@ -510,7 +510,7 @@ function panels(){
       </div>
       <div class="bdg" style="color:${e.color};border-color:${e.color}40">${e.label}</div>
     </div>`;
-    if(rg.note) h+=`<div class="pnote">phase 1: Naver pipeline staged</div>`;
+    
 
     h+=`<div class="sparklines-wrap" id="sparks-${rg.id}">
       <div class="spark-row"><span class="spark-lbl" style="color:${cl.sC}">S</span><canvas class="spark-canvas" id="sp-sv-${rg.id}"></canvas><span class="spark-val" style="color:${cl.sC}">${Math.round(cv.sv*100)}</span></div>
@@ -613,6 +613,7 @@ function updateTime(){
 // ── Live data pipeline ──────────────────────────────────────
 let API_URL = localStorage.getItem('as_api_url') || null;
 let liveUSMarket = null;
+window.liveMarkets = null;
 let apiStatus = 'unconfigured';
 
 function updateAPIBadge() {
@@ -632,10 +633,10 @@ function updateAPIBadge() {
 async function fetchLiveData() {
   if (!API_URL) return;
   try {
-    const r = await fetch(API_URL + '/api/market/us', { signal: AbortSignal.timeout(8000) });
+    const r = await fetch(API_URL + '/api/market/all', { signal: AbortSignal.timeout(12000) });
     if (!r.ok) throw new Error('non-200');
     const d = await r.json();
-    liveUSMarket = d;
+    window.liveMarkets = d;
     apiStatus = 'live';
     updateAPIBadge();
     panels(); draw();
@@ -660,11 +661,13 @@ function promptForAPI() {
 // gd() — live-aware wrapper around gdSim()
 function gd(ri) {
   const result = gdSim(ri);
-  if (ri === 0 && liveUSMarket && liveUSMarket.field_value != null) {
+  const regionId = ['us','uk','india'][ri];
+  const liveData = window.liveMarkets && window.liveMarkets[regionId];
+  if (liveData && liveData.field_value != null) {
     ['anxiety','confidence','aspiration','constraint'].forEach(cl => {
       if (result[cl]) {
-        result[cl].mv = liveUSMarket.field_value;
-        result[cl].mc = liveUSMarket.confidence || 0.85;
+        result[cl].mv = liveData.field_value;
+        result[cl].mc = liveData.confidence || 0.85;
       }
     });
   }
