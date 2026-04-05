@@ -629,14 +629,18 @@ function updateAPIBadge() {
   badge.style.color = s.color;
 }
 
+function r2(v) { return Math.round(v * 100) / 100; }
+
+function buildField(d) {
+  if (!d) return null;
+  return d;
+}
+
 async function fetchLiveData() {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
-    const r = await fetch(API_URL + '/api/market/all', { signal: controller.signal });
-    clearTimeout(timer);
-    if (!r.ok) throw new Error('non-200');
-    const d = await r.json();
+    const res = await fetch(API_URL + '/api/market/all');
+    if (!res.ok) throw new Error('non-200');
+    const d = await res.json();
     const liveCount = Object.values(d).filter(v => v !== null).length;
     if (liveCount === 0) throw new Error('all null');
     window.liveMarkets = d;
