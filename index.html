@@ -165,7 +165,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
 
 <div class="footer">
   <div class="fn" id="footer-text"></div>
-  <div class="fm"><span id="api-badge" style="cursor:pointer">simulated data</span><br>v0.7 prototype<br>3 axes · 3 regions · 4 clusters</div>
+  <div class="fm"><span id="api-badge" style="cursor:pointer">simulated data</span><br>v0.8 prototype<br>3 axes · 3 regions · 4 clusters</div>
 </div>
 </div>
 
@@ -258,6 +258,15 @@ function gdSim(ri){
     aspiration:{sv:sv2(sn(3,s)*0.75,nz(5,s)),sc2:0.45+sn(11,s)*0.35,mv:sv2(sn(3.3,s)*0.7,nz(6,s)),mc:0.55+sn(12,s)*0.3,nv:sn(5,s)*0.85+nz(11,s)*0.15,nc:0.45+sn(23,s)*0.4,nvel:(sn(24,s)*2-1)*tm,ndir:sn(25,s)*Math.PI*2,lead:sn(3.2,s),conc:sn(3,s)*0.8,lag:sn(2.8,s)*0.65,ld:Math.round((sn(13,s)-0.5)*12),themes},
     constraint:{sv:sv2(sn(2,s)*0.65,nz(7,s)),sc2:0.5+sn(14,s)*0.3,mv:sv2(sn(2.2,s)*0.6,nz(8,s)),mc:0.6+sn(15,s)*0.25,nv:sn(6,s)*0.7+nz(12,s)*0.3,nc:0.5+sn(26,s)*0.35,nvel:(sn(27,s)*2-1)*tm,ndir:sn(28,s)*Math.PI*2,lead:sn(2.1,s),conc:sn(2,s)*0.75,lag:sn(1.9,s)*0.6,ld:Math.round((sn(16,s)-0.5)*8),themes},
   };
+  // apply narrative force to each cluster
+  ['anxiety','confidence','aspiration','constraint'].forEach(cl => {
+    if (!result[cl]) return;
+    const forced = applyNarrativeForce(result[cl]);
+    result[cl].sv = forced.sv;
+    result[cl].mv = forced.mv;
+    result[cl]._dispersion = forced.dispersion;
+  });
+  return result;
 }
 
 function getES(cv){const d=cv.sv-cv.mv,l=cv.ld;if(Math.abs(d)>0.3)return ES[3];if(Math.abs(d)<0.08&&Math.abs(l)<3)return ES[1];if(l>4)return ES[0];if(l<-4)return ES[2];if(cv.sv>0.6&&cv.mv>0.6)return ES[4];return ES[1];}
@@ -641,31 +650,11 @@ const GDELT_QUERIES = {
 };
 
 async function fetchGDELT(region, cluster) {
+  // route via Render proxy — Safari blocks direct GDELT calls
   try {
-    const query = (GDELT_QUERIES[cluster] || {})[region] || 'economy';
-    const params = new URLSearchParams({
-      query: query + ' sourcelang:english',
-      mode: 'artlist', maxrecords: '25', timespan: '24h', format: 'json'
-    });
-    const res = await fetch(`${GDELT_BASE}?${params}`);
+    const res = await fetch(`${API_URL}/api/gdelt/${region}/${cluster}`);
     if (!res.ok) return null;
-    const d = await res.json();
-    const articles = d.articles || [];
-    if (!articles.length) return null;
-    const tones = articles.map(a => parseFloat(a.tone || 0)).filter(t => !isNaN(t));
-    if (!tones.length) return null;
-    const avgTone = tones.reduce((a,b) => a+b, 0) / tones.length;
-    const toneNorm = Math.min(Math.max((avgTone + 10) / 20, 0), 1);
-    const velocity = tones.length > 1 ? (tones[tones.length-1] - tones[0]) / tones.length / 2 : 0;
-    const titles = articles.slice(0,3).map(a => a.title).filter(Boolean);
-    return {
-      volume: articles.length, avg_tone: Math.round(avgTone*100)/100,
-      tone_normalised: Math.round(toneNorm*1000)/1000,
-      velocity: Math.round(velocity*1000)/1000,
-      confidence: 0.75, source: 'GDELT',
-      dominant_headline: titles[0] || '',
-      top_headlines: titles,
-    };
+    return await res.json();
   } catch(e) {
     console.warn('GDELT fetch failed', region, cluster, e.message);
     return null;
@@ -862,6 +851,116 @@ updateAPIBadge();
 setTimeout(draw, 120);
 fetchLiveData();
 setInterval(fetchLiveData, 15 * 60 * 1000);
+
+// ═══════════════════════════════════════════════════════════════
+// OBSERVATORY LAYER — system reading, signal typing, narrative force
+// ═══════════════════════════════════════════════════════════════
+
+// ── Signal type classification ────────────────────────────────
+function classifySignal(cv) {
+  const div = Math.abs(cv.sv - cv.mv);
+  const vel = cv.nvel || 0;
+  const lag = Math.abs(cv.ld || 0);
+  if (div > 0.3 && Math.abs(vel) > 0.35)  return { id:'dislocation',        label:'dislocation',        color:'#C94040', desc:'divergence with accelerating narrative' };
+  if (div > 0.3 && vel < -0.2)             return { id:'compression',        label:'compression',        color:'#7B5EA7', desc:'divergence, narrative fading' };
+  if (div < 0.12 && Math.abs(vel) > 0.35) return { id:'consensus',          label:'consensus forming',  color:'#4A8C5C', desc:'alignment with narrative acceleration' };
+  if (lag > 6)                             return { id:'lag-tension',        label:'lag tension',        color:'#B5883A', desc:'significant temporal offset between axes' };
+  if (div > 0.2 && lag > 3)               return { id:'drift',              label:'drift',              color:'#888888', desc:'gradual divergence developing' };
+  return null;
+}
+
+// ── Narrative force — amplify/dampen based on velocity ────────
+function applyNarrativeForce(cv) {
+  const vel = cv.nvel || 0;
+  const nv  = cv.nv   || 0.5;
+  const force = vel * 0.15; // moderate — max ±15% effect
+  const dispersion = Math.abs(vel) * 0.08;
+  return {
+    sv: Math.min(Math.max(cv.sv + force * nv, 0), 1),
+    mv: Math.min(Math.max(cv.mv - force * 0.5, 0), 1),
+    dispersion,
+  };
+}
+
+// ── Signal memory ─────────────────────────────────────────────
+const signalMemory = [];
+const MAX_MEMORY = 5;
+
+function recordSignal(region, cluster, sigType) {
+  if (!sigType) return;
+  // deduplicate — don't record same signal twice in a row for same region
+  const last = signalMemory[0];
+  if (last && last.region === region && last.type === sigType.id) return;
+  signalMemory.unshift({ region, cluster, type: sigType.id, label: sigType.label,
+                         color: sigType.color, ts: Date.now() });
+  if (signalMemory.length > MAX_MEMORY) signalMemory.pop();
+}
+
+function renderSignalMemory() {
+  const el = document.getElementById('signal-memory');
+  if (!el) return;
+  if (!signalMemory.length) { el.innerHTML = ''; return; }
+  const now = Date.now();
+  el.innerHTML = signalMemory.map(s => {
+    const age = Math.floor((now - s.ts) / 60000);
+    const timeLabel = age < 1 ? 'just now' : age < 5 ? 'recent' : `${age}m ago`;
+    return `<div class="sig-type" style="color:${s.color};border-color:${s.color}50">
+      ${s.region.toUpperCase()} · ${s.label} <span style="opacity:0.5;margin-left:3px">${timeLabel}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── System-level reading ──────────────────────────────────────
+let lastReading = '';
+let readingTimeout = null;
+
+function computeSystemReading(allData) {
+  // aggregate signals across all regions for active cluster
+  const clusterData = REGIONS.map((r,i) => allData[i][sc]);
+  const divs    = clusterData.map(cv => Math.abs((cv.sv||0.5) - (cv.mv||0.5)));
+  const vels    = clusterData.map(cv => cv.nvel || 0);
+  const lags    = clusterData.map(cv => Math.abs(cv.ld || 0));
+  const avgDiv  = divs.reduce((a,b)=>a+b,0)/divs.length;
+  const avgVel  = vels.reduce((a,b)=>a+b,0)/vels.length;
+  const avgLag  = lags.reduce((a,b)=>a+b,0)/lags.length;
+  const maxDiv  = Math.max(...divs);
+  const maxVel  = Math.max(...vels.map(Math.abs));
+
+  // pick the most salient reading
+  if (maxDiv > 0.35 && maxVel > 0.4)
+    return 'Narrative accelerating through divergent conditions across regions';
+  if (maxDiv > 0.35 && avgVel < -0.2)
+    return 'Divergence persisting as narrative momentum fades';
+  if (avgDiv < 0.1 && maxVel > 0.35)
+    return 'Broad alignment — narrative building ahead of markets';
+  if (avgDiv < 0.1 && maxVel < 0.1)
+    return 'System in relative equilibrium — axes closely entangled';
+  if (avgLag > 5)
+    return 'Temporal lag accumulating — sentiment and markets drifting apart';
+  if (maxDiv > 0.25)
+    return 'Divergence emerging between sentiment and market fields';
+  if (avgVel > 0.25)
+    return 'Narrative velocity rising — watch for field separation';
+  if (avgVel < -0.25)
+    return 'Narrative losing momentum across regions';
+  return 'Partial alignment with mixed signals across axes';
+}
+
+function updateSystemReading(allData) {
+  const reading = computeSystemReading(allData);
+  if (reading === lastReading) return;
+  const el = document.getElementById('system-reading');
+  if (!el) return;
+  // slow fade update — avoid flickering
+  if (readingTimeout) clearTimeout(readingTimeout);
+  el.style.opacity = '0';
+  readingTimeout = setTimeout(() => {
+    el.textContent = reading;
+    el.style.opacity = '1';
+    lastReading = reading;
+  }, 600);
+}
+
 </script>
 </body>
 </html>
