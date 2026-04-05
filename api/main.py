@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import time
+import random
 
 app = FastAPI()
 
@@ -24,41 +25,60 @@ def cached(key, fn):
         _cache[key] = {"data": data, "ts": now}
     return data
 
-YF_BASE = "https://query1.finance.yahoo.com/v8/finance/chart/"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json",
-}
+YF_HOSTS = [
+    "https://query1.finance.yahoo.com",
+    "https://query2.finance.yahoo.com",
+]
+
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+]
 
 def fetch_yf(ticker):
-    try:
-        r = httpx.get(
-            f"{YF_BASE}{ticker}",
-            params={"range": "5d", "interval": "1d"},
-            headers=HEADERS,
-            timeout=10,
-            follow_redirects=True,
-        )
-        d = r.json()
-        meta = d.get("chart", {}).get("result", [{}])[0].get("meta", {})
-        closes = d.get("chart", {}).get("result", [{}])[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
-        closes = [v for v in closes if v is not None]
-        if not closes or len(closes) < 2:
-            print(f"YF empty for {ticker}: {str(d)[:200]}")
-            return None
-        current = round(closes[-1], 2)
-        prev = round(closes[-2], 2)
-        change_pct = round((current - prev) / prev * 100, 2)
-        return {
-            "current": current,
-            "prev": prev,
-            "change_pct": change_pct,
-            "series": [round(v, 2) for v in closes],
-            "name": meta.get("longName") or meta.get("shortName") or ticker,
-        }
-    except Exception as e:
-        print(f"fetch_yf error {ticker}: {e}")
-        return None
+    for host in random.sample(YF_HOSTS, len(YF_HOSTS)):
+        try:
+            r = httpx.get(
+                f"{host}/v8/finance/chart/{ticker}",
+                params={"range": "5d", "interval": "1d"},
+                headers={
+                    "User-Agent": random.choice(USER_AGENTS),
+                    "Accept": "application/json,text/plain,*/*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Referer": "https://finance.yahoo.com/",
+                    "Origin": "https://finance.yahoo.com",
+                },
+                timeout=12,
+                follow_redirects=True,
+            )
+            if r.status_code != 200:
+                print(f"YF {host} returned {r.status_code} for {ticker}")
+                continue
+            d = r.json()
+            result = d.get("chart", {}).get("result")
+            if not result:
+                print(f"YF no result for {ticker}: {str(d)[:200]}")
+                continue
+            meta = result[0].get("meta", {})
+            closes = result[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+            closes = [v for v in closes if v is not None]
+            if len(closes) < 2:
+                continue
+            current = round(closes[-1], 2)
+            prev = round(closes[-2], 2)
+            change_pct = round((current - prev) / prev * 100, 2)
+            return {
+                "current": current,
+                "prev": prev,
+                "change_pct": change_pct,
+                "series": [round(v, 2) for v in closes],
+                "name": meta.get("longName") or meta.get("shortName") or ticker,
+            }
+        except Exception as e:
+            print(f"YF fetch error {host} {ticker}: {e}")
+            continue
+    return None
 
 def build_field(index_data, vol_data=None, vol_range=(10, 80)):
     if not index_data:
@@ -82,47 +102,37 @@ def build_field(index_data, vol_data=None, vol_range=(10, 80)):
         "volatility": vol_info,
         "field_value": round(vol_norm * 0.7 + (1 - idx_norm) * 0.3, 3),
         "confidence": 0.88 if vol_data else 0.70,
-        "source": "Yahoo Finance via proxy",
+        "source": "Yahoo Finance",
         "lag_days": 0,
     }
 
 @app.get("/")
 def root():
-    return {"name": "Animal Spirits API", "version": "0.9", "status": "live"}
+    return {"name": "Animal Spirits API", "version": "1.0", "status": "live"}
 
 @app.get("/api/market/us")
 def get_us():
-    def fetch():
-        return build_field(fetch_yf("%5EGSPC"), fetch_yf("%5EVIX"), (10, 80))
-    return cached("us", fetch)
+    return cached("us", lambda: build_field(fetch_yf("%5EGSPC"), fetch_yf("%5EVIX"), (10, 80)))
 
 @app.get("/api/market/uk")
 def get_uk():
-    def fetch():
-        return build_field(fetch_yf("%5EFTSE"), None, (10, 60))
-    return cached("uk", fetch)
+    return cached("uk", lambda: build_field(fetch_yf("%5EFTSE"), None, (10, 60)))
 
 @app.get("/api/market/india")
 def get_india():
-    def fetch():
-        return build_field(fetch_yf("%5ENSEI"), None, (10, 60))
-    return cached("india", fetch)
+    return cached("india", lambda: build_field(fetch_yf("%5ENSEI"), None, (10, 60)))
 
 @app.get("/api/market/all")
 def get_all():
-    def fetch_us():   return build_field(fetch_yf("%5EGSPC"), fetch_yf("%5EVIX"), (10, 80))
-    def fetch_uk():   return build_field(fetch_yf("%5EFTSE"), None, (10, 60))
-    def fetch_india():return build_field(fetch_yf("%5ENSEI"), None, (10, 60))
     return {
-        "us":    cached("us",    fetch_us),
-        "uk":    cached("uk",    fetch_uk),
-        "india": cached("india", fetch_india),
+        "us":    cached("us",    lambda: build_field(fetch_yf("%5EGSPC"), fetch_yf("%5EVIX"), (10, 80))),
+        "uk":    cached("uk",    lambda: build_field(fetch_yf("%5EFTSE"), None, (10, 60))),
+        "india": cached("india", lambda: build_field(fetch_yf("%5ENSEI"), None, (10, 60))),
     }
 
 @app.get("/api/debug")
 def debug():
-    return {
-        "spx": fetch_yf("%5EGSPC"),
-        "ftse": fetch_yf("%5EFTSE"),
-        "nsei": fetch_yf("%5ENSEI"),
-    }
+    results = {}
+    for sym, label in [("%5EGSPC","spx"), ("%5EFTSE","ftse"), ("%5ENSEI","nsei"), ("%5EVIX","vix")]:
+        results[label] = fetch_yf(sym)
+    return {"version": "1.0", "results": results}
