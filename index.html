@@ -138,7 +138,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
     <div class="bt">axis key</div>
     <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><circle cx="8" cy="6" r="7" fill="#E8A030" opacity="0.18"/><circle cx="8" cy="6" r="3.5" fill="#E8A030" opacity="0.8"/></svg><div class="ll">sentiment — warm · diffuse</div></div>
     <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><rect x="1" y="2" width="14" height="8" rx="2" fill="#4A7FB5" opacity="0.18"/><rect x="4" y="4" width="8" height="4" rx="1" fill="#4A7FB5" opacity="0.8"/></svg><div class="ll">market — cool · defined</div></div>
-    <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><line x1="4" y1="9" x2="18" y2="4" stroke="#A855C8" stroke-width="1.2" opacity="0.8"/><polygon points="18,2 22,6 15,6" fill="#A855C8" opacity="0.8"/></svg><div class="ll">narrative — directional · velocity</div></div>
+    <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><line x1="4" y1="9" x2="18" y2="4" stroke="#A855C8" stroke-width="1.2" opacity="0.8"/><polygon points="18,2 22,6 15,6" fill="#A855C8" opacity="0.8"/></svg><div class="ll">narrative — direction = tone · length = volume</div></div>
     <div style="margin-top:5px;padding-top:4px;border-top:0.5px solid var(--border)">
       <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><circle cx="6" cy="6" r="4" fill="#E8A030" opacity="0.45"/><rect x="14" y="3" width="8" height="6" rx="1" fill="#4A7FB5" opacity="0.45"/><line x1="10" y1="6" x2="14" y2="6" stroke="#888" stroke-width="0.8" stroke-dasharray="1.5 1"/></svg><div class="ll">S↔M offset = temporal lag</div></div>
       <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><circle cx="13" cy="6" r="6" fill="none" stroke="#888" stroke-width="0.5" stroke-dasharray="1.5 1.5" opacity="0.5"/><circle cx="13" cy="6" r="3" fill="none" stroke="#888" stroke-width="0.9" opacity="0.8"/></svg><div class="ll">diffusion = uncertainty</div></div>
@@ -337,33 +337,41 @@ function drawNarrative(ctx,rgs,ad,cl,opMult){
   rgs.forEach((rg,i)=>{
     if(focusRegion&&focusRegion!==rg.id) return;
     const cv=ad[i][sc];
-    const nv=cv.nv,vel=cv.nvel,dir=cv.ndir,ns=getNS(cv);
+    const nv=cv.nv,vel=cv.nvel;
     const{px,py}=rg;
     const num=3+Math.round(nv*3);
     const baseLen=16+nv*22;
     const velScale=1+Math.abs(vel)*1.3;
     const spread=vel>0.3?0.35:vel<-0.3?0.12:0.25;
+    const op=opMult||0.7;
+
+    // direction encodes tone velocity: up = positive, down = negative, flat = neutral
+    const velAngle=vel>0.1?-Math.PI*0.35:vel<-0.1?Math.PI*0.35:0;
+
+    // colour matches active cluster narrative colour
+    const nColor=cl.nC||'#A855C8';
+
     for(let a=0;a<num;a++){
-      const angle=dir+(a-(num-1)/2)*spread*(Math.PI/num);
+      const angle=velAngle+(a-(num-1)/2)*spread*(Math.PI/num);
       const len=baseLen*velScale*(0.75+a*0.08);
       const startR=10+nv*6;
       const sx2=px+Math.cos(angle)*startR,sy2=py+Math.sin(angle)*startR;
       const ex=px+Math.cos(angle)*(startR+len),ey=py+Math.sin(angle)*(startR+len);
-      const alpha=(0.45+nv*0.4)*opMult;
+      const alpha=(0.45+nv*0.4)*op;
       ctx.beginPath();ctx.moveTo(sx2,sy2);ctx.lineTo(ex,ey);
-      ctx.strokeStyle=ns.color+Math.round(alpha*0.65*255).toString(16).padStart(2,'0');
+      ctx.strokeStyle=nColor+Math.round(alpha*0.65*255).toString(16).padStart(2,'0');
       ctx.lineWidth=0.75+nv*0.5;
       ctx.setLineDash(vel>0.3?[]:[2,3]);ctx.stroke();ctx.setLineDash([]);
       const al=5+nv*2.5,aa=0.38;
       ctx.beginPath();
       ctx.moveTo(ex,ey);ctx.lineTo(ex-Math.cos(angle-aa)*al,ey-Math.sin(angle-aa)*al);
       ctx.moveTo(ex,ey);ctx.lineTo(ex-Math.cos(angle+aa)*al,ey-Math.sin(angle+aa)*al);
-      ctx.strokeStyle=ns.color+Math.round(alpha*255).toString(16).padStart(2,'0');
+      ctx.strokeStyle=nColor+Math.round(alpha*255).toString(16).padStart(2,'0');
       ctx.lineWidth=0.85;ctx.stroke();
     }
     const pR=7+nv*8;
     const pg=ctx.createRadialGradient(px,py,0,px,py,pR);
-    pg.addColorStop(0,ns.color+'44');pg.addColorStop(0.6,ns.color+'18');pg.addColorStop(1,ns.color+'00');
+    pg.addColorStop(0,nColor+'44');pg.addColorStop(0.6,nColor+'18');pg.addColorStop(1,nColor+'00');
     ctx.beginPath();ctx.arc(px,py,pR,0,Math.PI*2);ctx.fillStyle=pg;ctx.fill();
   });
 }
@@ -650,13 +658,11 @@ const GDELT_QUERIES = {
 };
 
 async function fetchGDELT(cluster) {
-  // fetch active cluster across all regions in one call
+  // uses safeFetch — Render already awake by the time this is called
   try {
     const res = await fetch(`${API_URL}/api/gdelt/cluster/${cluster}`);
     if (!res.ok) return null;
-    const d = await res.json();
-    // returns {us: {...}, uk: {...}, india: {...}}
-    return d;
+    return await res.json();
   } catch(e) {
     console.warn('GDELT fetch failed', cluster, e.message);
     return null;
@@ -774,20 +780,22 @@ async function fetchLiveData() {
   const badge = document.getElementById('api-badge');
   if (badge) { badge.textContent = 'connecting...'; badge.style.color = 'var(--text3)'; }
 
-  // fetch all three axes — market via Render proxy, sentiment+narrative browser-direct
-  const [mktRes, sentRes, narrRes] = await Promise.allSettled([
-    fetchWithWake(API_URL + '/api/market/all', 90000),
+  // step 1: wake Render and fetch market — this ensures API is alive before narrative calls
+  const mkt = await fetchWithWake(API_URL + '/api/market/all', 90000);
+  if (mkt && Object.values(mkt).some(v => v !== null)) {
+    window.liveMarkets = mkt; axisStatus.market = true;
+    updateAPIBadge(); panels(); draw();
+  }
+
+  // step 2: sentiment (browser-direct) and narrative (via now-awake Render) in parallel
+  const [sentRes, narrRes] = await Promise.allSettled([
     fetchAllSentiment(),
     fetchAllNarrative(),
   ]);
 
-  const mkt  = mktRes.status  === 'fulfilled' ? mktRes.value  : null;
   const sent = sentRes.status === 'fulfilled' ? sentRes.value : null;
   const narr = narrRes.status === 'fulfilled' ? narrRes.value : null;
 
-  if (mkt && Object.values(mkt).some(v => v !== null)) {
-    window.liveMarkets = mkt; axisStatus.market = true;
-  }
   if (sent && Object.values(sent).some(r => Object.values(r).some(Boolean))) {
     window.liveSentiment = sent; axisStatus.sentiment = true;
   }
