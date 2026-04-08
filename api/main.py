@@ -325,17 +325,11 @@ def debug():
     }
 
 # ── Undertow: PortWatch constants ────────────────────────────
-# Dataset UUIDs confirmed from World Bank Red Sea Monitoring notebook:
-#   chokepoint6 (Hormuz): cb5856222a5b4105adc6ee7e880a1730
-#   chokepoint1 (Suez):   c57c79bf612b4372b08a9c6ea9c97ef0
-PW_DATASETS = {
-    "hormuz": "cb5856222a5b4105adc6ee7e880a1730",
-    "suez":   "c57c79bf612b4372b08a9c6ea9c97ef0",
-}
-PW_NORMAL = {"hormuz": 130, "suez": 60}  # pre-crisis 7-day average baselines (EIA/IEA 2025)
-PW_TTL    = 21600  # 6 hours — PortWatch updates weekly, no value in fetching more often
-
-# ── Endpoints — Undertow ──────────────────────────────────────
+# PortWatch ArcGIS endpoint not reachable from Render's network.
+# Fetched browser-direct in the Undertow frontend via allorigins proxy.
+# Constants retained here for reference only.
+# PW_DATASETS = { "hormuz": "cb5856222a5b4105adc6ee7e880a1730", "suez": "c57c79bf612b4372b08a9c6ea9c97ef0" }
+# PW_NORMAL   = { "hormuz": 130, "suez": 60 }
 
 @app.get("/api/undertow/market")
 def get_undertow_market():
@@ -388,71 +382,3 @@ def get_undertow_market():
     bdi   = cached("undertow_bdi",   fetch_bdi)
 
     return {"brent": brent, "bdi": bdi}
-
-
-@app.get("/api/undertow/portwatch")
-def get_undertow_portwatch():
-    """
-    IMF PortWatch AIS transit calls for Hormuz and Suez.
-    Queries the public ArcGIS FeatureServer — no API key required.
-    Updated weekly by PortWatch (Tuesdays 09:00 ET) — cached 6 hours.
-    Returns 7-day average daily transit count, normalised against
-    pre-crisis baselines: Hormuz 130/day, Suez 60/day (EIA/IEA 2025).
-
-    Dataset UUIDs confirmed from World Bank Red Sea Monitoring notebook:
-      chokepoint6 (Hormuz): cb5856222a5b4105adc6ee7e880a1730
-      chokepoint1 (Suez):   c57c79bf612b4372b08a9c6ea9c97ef0
-    """
-    def fetch_portwatch_node(node, uuid):
-        try:
-            url = (
-                f"https://portwatch.imf.org/datasets/{uuid}_0/query"
-                f"?where=1%3D1"
-                f"&outFields=date%2Cn_total%2Cn_tanker%2Ccapacity"
-                f"&orderByFields=date+DESC"
-                f"&resultRecordCount=7"
-                f"&returnGeometry=false&f=json"
-            )
-            r = httpx.get(
-                url,
-                headers={"User-Agent": "Mozilla/5.0 (Undertow/1.0; research)"},
-                timeout=15,
-                follow_redirects=True,
-            )
-            if r.status_code != 200:
-                print(f"PortWatch {node}: HTTP {r.status_code}")
-                return None
-            features = r.json().get("features", [])
-            if not features:
-                print(f"PortWatch {node}: no features returned")
-                return None
-            total = sum(f.get("attributes", {}).get("n_total") or 0 for f in features)
-            avg   = round(total / len(features), 1)
-            norm  = round(min(avg / PW_NORMAL[node], 1.0), 3)
-            latest_ts = features[0].get("attributes", {}).get("date")
-            return {
-                "avg_daily":       avg,
-                "norm":            norm,
-                "n_features":      len(features),
-                "latest_ts":       latest_ts,
-                "normal_baseline": PW_NORMAL[node],
-            }
-        except Exception as e:
-            print(f"PortWatch {node} error: {e}")
-            return None
-
-    results = {}
-    now = time.time()
-    for node, uuid in PW_DATASETS.items():
-        cache_key = f"undertow_pw_{node}"
-        if (cache_key in _cache
-                and _cache[cache_key]["data"] is not None
-                and now - _cache[cache_key]["ts"] < PW_TTL):
-            results[node] = _cache[cache_key]["data"]
-        else:
-            data = fetch_portwatch_node(node, uuid)
-            if data is not None:
-                _cache[cache_key] = {"data": data, "ts": now}
-            results[node] = data
-
-    return results
