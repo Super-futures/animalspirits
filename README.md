@@ -46,6 +46,23 @@ The platform identifies qualitatively distinct system states derived from the re
 | **lag tension** | large temporal offset | sentiment and markets significantly out of step |
 | **drift** | gradual divergence developing | slow separation beginning |
 
+When all three regions share the same state simultaneously, the system reading names it explicitly as global synchronisation — similarity as signal rather than noise.
+
+---
+
+## Cluster structure
+
+Each affect cluster has a distinct temporal signature, not just a distinct label:
+
+| Cluster | Temporal tendency | Volatility | Narrative character |
+|---|---|---|---|
+| Anxiety / fear | Sentiment leads market — anticipatory | High | Fast-spreading, accelerates quickly |
+| Confidence | Co-incident — sentiment and market move together | Moderate | Steady, moderate velocity |
+| Aspiration | Market leads sentiment — desire follows conditions | High | Positive bias, moderate spread |
+| Constraint | Market strongly leads sentiment — reactive, persistent | Low | Stories fade here, slow velocity |
+
+This means switching between clusters produces structurally different readings — not just different labels on the same behaviour.
+
 ---
 
 ## System-level reading
@@ -56,11 +73,13 @@ A single continuously updating sentence near the header summarises the overall c
 
 ## Regions — v0.1
 
-| Region | Sentiment | Market | Narrative |
-|---|---|---|---|
-| United States | Wikimedia (English) | S&P 500 + VIX | GDELT (English) |
-| United Kingdom | Wikimedia (English) | FTSE 100 | GDELT (English) |
-| India | Wikimedia (English) | Nifty 50 + India VIX | GDELT (English) |
+| Region | Sentiment | Market | Narrative | Rhythm |
+|---|---|---|---|---|
+| United States | Wikimedia (English) | S&P 500 + VIX | GDELT (English) | Baseline |
+| United Kingdom | Wikimedia (English) | FTSE 100 | GDELT (English) | Slower · more persistent |
+| India | Wikimedia (English) | Nifty 50 + India VIX | GDELT (English) | Faster · higher variance |
+
+Regional rhythm differences are structural — India oscillates faster with higher variance, UK states are slower to form and slower to fade. This means regional similarity, when it appears, is more likely to reflect genuine synchronisation than shared system logic.
 
 **Methodological note:** Signals are platform-specific and culturally situated. English-language Wikipedia and GDELT coverage reflects anglophone media and search behaviour. This limitation is declared rather than suppressed — it is part of the instrument's epistemological position. Non-anglophone pipelines are staged for subsequent phases.
 
@@ -126,6 +145,7 @@ Then open `http://localhost:8000/api/debug`
 **Frontend → GitHub Pages or Netlify**
 
 Live at:
+- [animal-spirits.netlify.app](https://animal-spirits.netlify.app)
 - [super-futures.github.io/animalspirits](https://super-futures.github.io/animalspirits)
 
 **API → Render**
