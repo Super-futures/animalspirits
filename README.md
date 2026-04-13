@@ -145,7 +145,6 @@ Then open `http://localhost:8000/api/debug`
 **Frontend → GitHub Pages or Netlify**
 
 Live at:
-- [animal-spirits.netlify.app](https://animal-spirits.netlify.app)
 - [super-futures.github.io/animalspirits](https://super-futures.github.io/animalspirits)
 
 **API → Render**
