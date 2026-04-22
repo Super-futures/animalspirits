@@ -36,7 +36,11 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
 #ov{position:absolute;top:0;left:0;pointer-events:none}
 .lbox{position:absolute;bottom:8px;left:8px;background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:7px 9px;transition:opacity 0.3s}
 .sbox{position:absolute;top:8px;right:8px;background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:7px 9px;transition:opacity 0.3s}
-@media(max-width:440px){.lbox,.sbox{display:none}}
+.ibox{position:absolute;bottom:8px;right:8px;background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:7px 9px;transition:opacity 0.3s;max-width:190px}
+.ibox .ih{font-size:9px;font-weight:500;color:var(--text);margin-bottom:3px;line-height:1.3}
+.ibox .ipct{font-size:8px;color:var(--text3);margin-bottom:5px}
+.ibox .iln{font-size:7px;color:var(--text2);line-height:1.4;margin-bottom:2px}
+@media(max-width:440px){.lbox,.sbox,.ibox{display:none}}
 .bt{font-size:7px;color:var(--text3);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:5px}
 .lr{display:flex;align-items:center;gap:6px;margin-bottom:3px}
 .ll{font-size:7px;color:var(--text2);line-height:1.3}
@@ -167,6 +171,12 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
       <div class="lr"><div style="width:6px;height:6px;background:#4A8C5C;transform:rotate(45deg);flex-shrink:0"></div><div class="ll">decelerating — fading</div></div>
     </div>
   </div>
+  <div class="ibox" id="ibox" style="display:none">
+    <div class="bt">insight</div>
+    <div class="ih" id="ibox-head"></div>
+    <div class="ipct" id="ibox-pct"></div>
+    <div id="ibox-lines"></div>
+  </div>
 </div>
 
 <div class="panels" id="panels"></div>
@@ -203,7 +213,9 @@ let pulse = true;
 const TH_MULT = {'24h':1.0,'7d':0.6,'30d':0.35};
 
 const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
-const proj = d3.geoNaturalEarth1().scale(153).translate([480,240]);
+const proj = d3.geoMercator()
+  .scale(140)
+  .translate([480,240]);
 const mapSvg = d3.select('#as-map');
 
 const HIST_LEN = 28;
@@ -501,18 +513,41 @@ function drawPsiContour(ctx,w,h,rgs,states){
 // ═══════════════════════════════════════════════════════════════
 function getCoords(){
   const el=document.getElementById('as-map'),r=el.getBoundingClientRect();
-  const sx=r.width/960,sy=r.height/480;
-  return REGIONS.map(rg=>{const[x,y]=proj([rg.lng,rg.lat]);return{...rg,px:x*sx,py:y*sy};});
+  const s=r.width/960;
+  return REGIONS.map(rg=>{
+    const [x,y]=proj([rg.lng,rg.lat]);
+    return {...rg,px:x*s,py:y*s};
+  });
 }
 
-function getFocusViewport(rg,rect){
-  const[x,y]=proj([rg.lng,rg.lat]);
-  const sx=rect.width/960,sy=rect.height/480;
-  const px=x*sx,py=y*sy;
-  const zoom=2.2;
-  const vx=px-rect.width/(2*zoom);
-  const vy=py-rect.height/(2*zoom);
-  return{zoom,vx,vy};
+function getInsight(rg, st){
+  const {sig, dyn} = st;
+  const lag = sig.a_norm - sig.m_norm;
+
+  return {
+    region: rg.label,
+    regime: dyn.regime,
+    confidence: Math.max(dyn.p_bull, dyn.p_bear, dyn.p_stag),
+
+    drivers: {
+      psi: dyn.psi,
+      tension: dyn.tension,
+      entropy: dyn.H,
+      narrative_velocity: sig.dn,
+      market_momentum: sig.dm
+    },
+
+    interpretation: [
+      lag > 0.2 ? "attention leading" :
+      lag < -0.2 ? "market leading" : "co-incident",
+
+      dyn.p_stag > 0.5 ? "high instability" :
+      dyn.H > 0.5 ? "elevated entropy" : "stable",
+
+      sig.dn > 0.2 ? "narrative accelerating" :
+      sig.dn < -0.2 ? "narrative cooling" : "narrative steady"
+    ]
+  };
 }
 
 function drawSparkline(canvas,data,color,val){
@@ -661,8 +696,6 @@ function updateRegimeCursor(states){
   cursor.style.left=(t*100)+'%';
 }
 
-let viewState={zoom:1,vx:0,vy:0};
-
 function draw(){
   const el=document.getElementById('as-map'),rect=el.getBoundingClientRect();
   if(!rect.width) return;
@@ -682,18 +715,6 @@ function draw(){
   const sf=rect.width/960;
   updateRegimeCursor(states);
 
-  // focus momentum
-  const target=focusRegion?getFocusViewport(REGIONS.find(r=>r.id===focusRegion),rect):{zoom:1,vx:0,vy:0};
-  viewState.zoom+=(target.zoom-viewState.zoom)*0.12;
-  viewState.vx+=(target.vx-viewState.vx)*0.12;
-  viewState.vy+=(target.vy-viewState.vy)*0.12;
-  const transformed=Math.abs(viewState.zoom-1)>0.005||Math.abs(viewState.vx)>0.5||Math.abs(viewState.vy)>0.5;
-  if(transformed){
-    ctx.save();
-    ctx.translate(-viewState.vx*viewState.zoom,-viewState.vy*viewState.zoom);
-    ctx.scale(viewState.zoom,viewState.zoom);
-  }
-
   // RBF isoline (Ψ = 0)
   if(!focusRegion){
     drawPsiContour(ctx,rect.width,rect.height,rgs,states);
@@ -710,6 +731,9 @@ function draw(){
     const visInstability=Math.min(1,dyn.instability/1.6);
     const stagDiff=1+visInstability*2.0;
     const jitter=visInstability*2.5;
+    const time=Date.now()*0.001;
+    const jx=Math.sin(time+i*10)*jitter*0.5;
+    const jy=Math.cos(time+i*10)*jitter*0.5;
     let aColor=lerpColor(regimeColor,A_COLOR,0.35);
     let mColor=lerpColor(regimeColor,M_COLOR,0.35);
 
@@ -722,8 +746,7 @@ function draw(){
 
     const aR=11+sig.a*18;
     const aO=aR*(1.6+visInstability*2.2)*stagDiff;
-    const jx=(Math.random()-0.5)*jitter;
-    const jy=(Math.random()-0.5)*jitter;
+
     const apx=px-dyn.psi*2*sf+jx;
     const apy=py-dyn.psi*sf+jy;
 
@@ -849,8 +872,6 @@ function draw(){
     if(dyn.p_stag>0.5){ctx.fillStyle=STAG_COLOR+'cc';ctx.fillText('stag',px,ly+21);}
     ctx.globalAlpha=1;
   });
-
-  if(transformed) ctx.restore();
 }
 
 function getSignalText(dyn){
@@ -945,6 +966,17 @@ function panels(){
       focusRegion=focusRegion===rg.id?null:rg.id;
       document.getElementById('lbox').style.opacity=focusRegion?'0.4':'1';
       document.getElementById('sbox').style.opacity=focusRegion?'0.4':'1';
+      const ibox=document.getElementById('ibox');
+      if(focusRegion){
+        const st=states[ri];
+        const insight=getInsight(rg,st);
+        document.getElementById('ibox-head').textContent=insight.region+' — '+insight.regime;
+        document.getElementById('ibox-pct').textContent=Math.round(insight.confidence*100)+'% confidence';
+        document.getElementById('ibox-lines').innerHTML=insight.interpretation.map(line=>`<div class="iln">• ${line}</div>`).join('');
+        ibox.style.display='block';
+      }else{
+        ibox.style.display='none';
+      }
       panels(); draw();
     };
     con.appendChild(p);
