@@ -131,7 +131,7 @@ The map encodes relationships, not values:
 | P_bull / P_bear | Continuous green ↔ red gradient |
 | P_stag | Fragmentation, desaturation, blur |
 | H | Entropy ring dash ratio around regime badge |
-| instability | Ghost trail intensity, jitter, opacity modulation |
+| instability | Ghost trail intensity, deterministic jitter, opacity modulation |
 
 **Ghost trails** — canvas fade at 8% per frame makes drift and regime shifts visible as motion smear.
 
@@ -144,6 +144,30 @@ The map encodes relationships, not values:
 **Curved entanglement arcs** — quadratic Bézier links between regions, thickness scaling with narrative delta, colour shifting toward source regime.
 
 **Unified sparklines** — single 24 px canvas per panel with A, M, N in horizontal bands. Fill between A and M shows divergence directly.
+
+---
+
+## Interaction
+
+Clicking a region panel toggles **focus mode**:
+
+- The selected region is highlighted with a focus ring
+- Non-selected regions dim to 25% opacity
+- RBF isolines and entanglement arcs are suppressed to reduce visual noise
+- An **insight panel** appears on the map with a structured reading:
+
+```
+region — regime
+confidence %
+
+• attention leading / market leading / co-incident
+• high instability / elevated entropy / stable
+• narrative accelerating / cooling / steady
+```
+
+The insight is computed live from the dynamical state (`Ψ`, tension, entropy, narrative velocity, market momentum) and is not pre-written. It is a **state-derived interpretation** of the latent field.
+
+Clicking the same panel again releases focus and restores the full field view.
 
 ---
 
@@ -232,7 +256,7 @@ The project engages Keynes's original formulation of animal spirits, Robert Shil
 
 ## Status
 
-v0.9 prototype · continuous behavioural field model · 3 regions · 3 axes · 3 states
+v0.10 prototype · continuous behavioural field model · 3 regions · 3 axes · 3 states · insight-driven interaction
 
 This is a research prototype and affective observatory. It is not a trading signal engine.
 
