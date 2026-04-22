@@ -42,7 +42,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
 .ll{font-size:7px;color:var(--text2);line-height:1.3}
 .panels{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
 @media(max-width:500px){.panels{grid-template-columns:1fr}}
-.panel{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;padding:9px 11px;cursor:pointer;transition:all 0.25s}
+.panel{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;padding:9px 11px;cursor:pointer;transition:all 0.25s;position:relative}
 .panel:hover{border-color:var(--border2)}
 .panel.sel{border-width:1.5px;box-shadow:0 2px 12px rgba(0,0,0,0.07)}
 .panel.alert-panel{border-color:#C9404055}
@@ -93,6 +93,11 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
 .footer{display:flex;justify-content:space-between;align-items:flex-start;margin-top:8px;padding-top:7px;border-top:0.5px solid var(--border);gap:12px;flex-wrap:wrap}
 .fn{font-size:7px;color:var(--text3);line-height:1.6;max-width:600px}
 .fm{font-size:7px;color:var(--text3);text-align:right;line-height:1.6;white-space:nowrap}
+
+@keyframes livePulse{
+  0%,100%{opacity:0.3}
+  50%{opacity:1}
+}
 </style>
 </head>
 <body>
@@ -113,11 +118,14 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
 </div>
 
 <div class="ctrls">
-  <span style="font-size:8px;color:var(--text3)">cluster</span>
-  <button class="cb active" data-cl="anxiety" style="color:#C94040;border-color:#C9404055">anxiety / fear</button>
-  <button class="cb" data-cl="confidence" style="color:#4A8C5C">confidence</button>
-  <button class="cb" data-cl="aspiration" style="color:#4A7FB5">aspiration</button>
-  <button class="cb" data-cl="constraint" style="color:#B5883A">constraint</button>
+  <span style="font-size:8px;color:var(--text3);white-space:nowrap">regime</span>
+  <div style="display:flex;align-items:center;gap:6px;flex:1;max-width:240px;min-width:120px">
+    <span style="font-size:8px;color:#2D9C5C;font-weight:500">Bull</span>
+    <div style="flex:1;height:6px;border-radius:3px;background:linear-gradient(90deg,#2D9C5F 0%,#B5883A 50%,#C94040 100%);position:relative;overflow:visible">
+      <div id="regime-cursor" style="position:absolute;top:-2px;left:50%;width:3px;height:10px;background:var(--text);border-radius:1px;transition:left 0.6s ease;transform:translateX(-50%)"></div>
+    </div>
+    <span style="font-size:8px;color:#C94040;font-weight:500">Bear</span>
+  </div>
   <div style="display:flex;gap:3px;margin-left:8px">
     <button class="th-btn active" data-th="24h">24h</button>
     <button class="th-btn" data-th="7d">7d</button>
@@ -125,7 +133,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
   </div>
   <button class="unc-btn" id="unc-btn">uncertainty</button>
   <div class="fk">
-    <div class="fki"><div style="width:7px;height:7px;border-radius:50%;background:#E8A030;opacity:0.85"></div>sentiment axis</div>
+    <div class="fki"><div style="width:7px;height:7px;border-radius:50%;background:#E8A030;opacity:0.85"></div>attention axis</div>
     <div class="fki"><div style="width:7px;height:7px;border-radius:2px;background:#4A7FB5;opacity:0.85"></div>market axis</div>
     <div class="fki"><div style="width:7px;height:7px;border-radius:1px;background:#A855C8;opacity:0.85;transform:rotate(45deg)"></div>narrative axis</div>
   </div>
@@ -136,11 +144,11 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
   <canvas id="ov"></canvas>
   <div class="lbox" id="lbox">
     <div class="bt">axis key</div>
-    <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><circle cx="8" cy="6" r="7" fill="#E8A030" opacity="0.18"/><circle cx="8" cy="6" r="3.5" fill="#E8A030" opacity="0.8"/></svg><div class="ll">sentiment — warm · diffuse</div></div>
+    <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><circle cx="8" cy="6" r="7" fill="#E8A030" opacity="0.18"/><circle cx="8" cy="6" r="3.5" fill="#E8A030" opacity="0.8"/></svg><div class="ll">attention — warm · diffuse</div></div>
     <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><rect x="1" y="2" width="14" height="8" rx="2" fill="#4A7FB5" opacity="0.18"/><rect x="4" y="4" width="8" height="4" rx="1" fill="#4A7FB5" opacity="0.8"/></svg><div class="ll">market — cool · defined</div></div>
     <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><line x1="4" y1="9" x2="18" y2="4" stroke="#A855C8" stroke-width="1.2" opacity="0.8"/><polygon points="18,2 22,6 15,6" fill="#A855C8" opacity="0.8"/></svg><div class="ll">narrative — direction = tone · length = volume</div></div>
     <div style="margin-top:5px;padding-top:4px;border-top:0.5px solid var(--border)">
-      <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><circle cx="6" cy="6" r="4" fill="#E8A030" opacity="0.45"/><rect x="14" y="3" width="8" height="6" rx="1" fill="#4A7FB5" opacity="0.45"/><line x1="10" y1="6" x2="14" y2="6" stroke="#888" stroke-width="0.8" stroke-dasharray="1.5 1"/></svg><div class="ll">S↔M offset = temporal lag</div></div>
+      <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><circle cx="6" cy="6" r="4" fill="#E8A030" opacity="0.45"/><rect x="14" y="3" width="8" height="6" rx="1" fill="#4A7FB5" opacity="0.45"/><line x1="10" y1="6" x2="14" y2="6" stroke="#888" stroke-width="0.8" stroke-dasharray="1.5 1"/></svg><div class="ll">A↔M offset = temporal lag</div></div>
       <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><circle cx="13" cy="6" r="6" fill="none" stroke="#888" stroke-width="0.5" stroke-dasharray="1.5 1.5" opacity="0.5"/><circle cx="13" cy="6" r="3" fill="none" stroke="#888" stroke-width="0.9" opacity="0.8"/></svg><div class="ll">diffusion = uncertainty</div></div>
       <div class="lr"><svg width="26" height="12" style="flex-shrink:0"><circle cx="6" cy="7" r="4" fill="#C94040" opacity="0.5"/><circle cx="6" cy="7" r="7" fill="none" stroke="#C94040" stroke-width="0.8" opacity="0.4"/></svg><div class="ll">ring = signal emerging</div></div>
     </div>
@@ -165,197 +173,347 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
 
 <div class="footer">
   <div class="fn" id="footer-text"></div>
-  <div class="fm"><span id="api-badge" style="cursor:pointer">simulated data</span><br>v0.8 prototype<br>3 axes · 3 regions · 4 clusters</div>
+  <div class="fm"><span id="api-badge" style="cursor:pointer">simulated data</span><br>v0.9 prototype · 3 axes · 3 regions · continuous regime<br>Bull · Bear · Stag</div>
 </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 <script>
-const REGIONS=[
-  {id:'us',   label:'United States', short:'US',source:'Google Trends + Yahoo Finance + GDELT',note:false,lng:-98,  lat:38,  color:'#4A7FB5'},
-  {id:'uk',   label:'United Kingdom',short:'UK',source:'Google Trends + FTSE + GDELT',         note:false,lng:-1.5, lat:52.5,color:'#7B5EA7'},
-  {id:'india',label:'India',          short:'IN',source:'Google Trends (anglophone) + GDELT',    note:false,lng:78.9, lat:20.6, color:'#C97B5A'},
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
+const REGIONS = [
+  {id:'us',   label:'United States', short:'US', lng:-98,  lat:38,   color:'#4A7FB5'},
+  {id:'uk',   label:'United Kingdom',short:'UK', lng:-1.5, lat:52.5, color:'#7B5EA7'},
+  {id:'india',label:'India',         short:'IN', lng:78.9, lat:20.6, color:'#C97B5A'},
 ];
-const CLUSTERS=[
-  {id:'anxiety',   label:'anxiety / fear',color:'#C94040',sC:'#E8803A',mC:'#5A7FB5',nC:'#A855C8'},
-  {id:'confidence',label:'confidence',   color:'#4A8C5C',sC:'#7BC46A',mC:'#4A9C8C',nC:'#8855C8'},
-  {id:'aspiration',label:'aspiration',   color:'#4A7FB5',sC:'#E8C030',mC:'#4A7FB5',nC:'#C855A8'},
-  {id:'constraint',label:'constraint',   color:'#B5883A',sC:'#C8A050',mC:'#7A6AAA',nC:'#9055C8'},
-];
-const ES=[
-  {id:'leading',   label:'affect leading', color:'#4A8C5C',desc:'sentiment precedes market movement'},
-  {id:'concurrent',label:'concurrent',     color:'#4A7FB5',desc:'fields entangled in real time'},
-  {id:'lagging',   label:'market leading', color:'#7B5EA7',desc:'economic shock driving affect'},
-  {id:'divergent', label:'divergent',      color:'#C94040',desc:'affect and markets opposing'},
-  {id:'amplifying',label:'amplifying',     color:'#B5883A',desc:'mutual feedback loop active'},
-];
-const NS=[
-  {id:'accelerating',label:'accelerating',color:'#A855C8',desc:'narrative spreading fast — contagion risk'},
-  {id:'stable',      label:'stable',      color:'#888888',desc:'narrative velocity steady'},
-  {id:'decelerating',label:'decelerating',color:'#4A8C5C',desc:'story losing momentum'},
-];
-const THEMES={
-  anxiety:{
-    us:[{label:'rate decisions'},{label:'job security'},{label:'market volatility'},{label:'cost of living'}],
-    uk:[{label:'cost of living'},{label:'mortgage stress'},{label:'energy prices'}],
-    india:[{label:'rupee pressure'},{label:'inflation concern'},{label:'job market anxiety'}],
-  },
-  confidence:{
-    us:[{label:'earnings growth'},{label:'soft landing'},{label:'consumer spending'}],
-    uk:[{label:'wage growth'},{label:'inflation cooling'},{label:'investment outlook'}],
-    india:[{label:'growth outlook'},{label:'startup activity'},{label:'consumer confidence'}],
-  },
-  aspiration:{
-    us:[{label:'luxury travel'},{label:'housing upgrade'},{label:'equity wealth'},{label:'lifestyle shift'}],
-    uk:[{label:'summer travel'},{label:'home renovation'},{label:'premium retail'}],
-    india:[{label:'overseas travel'},{label:'premium brands'},{label:'middle class rise'}],
-  },
-  constraint:{
-    us:[{label:'budget shopping'},{label:'debt management'},{label:'side income'}],
-    uk:[{label:'food bank demand'},{label:'BNPL usage'},{label:'discount retail'}],
-    india:[{label:'expense cutting'},{label:'value retail'},{label:'debt pressure'}],
-  },
-};
-const FOOTER_TEXT={
-  anxiety:'Anxiety / fear registers as anticipatory constraint — searches for protection, liquidity, and certainty. Across three axes: sentiment moves first, market responds, narrative accelerates the cycle. When all three align, the signal is clearest.',
-  confidence:'Confidence signals a collective tolerance for risk — rising credit uptake, investment activity, expansive search behaviour. When the sentiment and market axes converge and narrative velocity is steady, the feedback loop between belief and action is at its tightest.',
-  aspiration:'Aspiration is not simply spending — it is future-oriented identity projection via consumption. Luxury travel, lifestyle upgrades, housing searches encode where people believe they are headed. Watch for aspiration in the sentiment axis while the market axis lags — that gap is the leading edge.',
-  constraint:'Constraint behaviour is distinct from anxiety: active adjustment rather than anticipatory fear. Searches for budgeting, discount retail, debt consolidation reflect a population in recalibration. The narrative axis often decelerates here — stories of crisis giving way to quiet adaptation.',
-};
 
-let seed=1.0,sc='anxiety',sr=null,pulse=true,timeHorizon='24h',showUncertainty=false;
-let focusRegion=null;
-const TH_MULT={'24h':1.0,'7d':0.6,'30d':0.35};
-const isDark=matchMedia('(prefers-color-scheme:dark)').matches;
-const proj=d3.geoNaturalEarth1().scale(153).translate([480,240]);
-const mapSvg=d3.select('#as-map');
+const BULL_COLOR = '#2D9C5F';
+const BEAR_COLOR = '#C94040';
+const STAG_COLOR = '#B5883A';
+const A_COLOR    = '#E8A030';
+const M_COLOR    = '#4A7FB5';
+const N_COLOR    = '#A855C8';
 
-// sparkline history buffer — 28 points per region per field
-const HIST_LEN=28;
-const history={};
-REGIONS.forEach(r=>{history[r.id]={sv:[],mv:[],nv:[]};for(let i=0;i<HIST_LEN;i++){const s=i*0.08;history[r.id].sv.push(Math.sin(s*1.3+r.lng*0.01)*0.3+0.5);history[r.id].mv.push(Math.sin(s*1.1+r.lng*0.01+1)*0.25+0.5);history[r.id].nv.push(Math.sin(s*1.7+r.lng*0.01+2)*0.25+0.45);}});
+let timeHorizon = '24h';
+let showUncertainty = false;
+let focusRegion = null;
+let pulse = true;
+const TH_MULT = {'24h':1.0,'7d':0.6,'30d':0.35};
 
-function sn(n,s){return Math.sin(s*13.7+n*7.3)*0.5+0.5}
-function nz(n,s){return(Math.sin(s*3.1+n*11.7)+Math.sin(s*7.9+n*2.3))*0.25+0.5}
+const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
+const proj = d3.geoNaturalEarth1().scale(153).translate([480,240]);
+const mapSvg = d3.select('#as-map');
 
-function gdSim(ri){
-  const s=seed+ri*3.7;
-  const tm=TH_MULT[timeHorizon];
-
-  // ── Regional rhythm differentiation ──────────────────────────
-  // India: higher frequency, higher variance
-  // UK: lower variance, persistent states
-  // US: standard
-  const regionId = ['us','uk','india'][ri];
-  const rFreq   = regionId==='india' ? 1.8 : regionId==='uk' ? 0.7 : 1.0;
-  const rVar    = regionId==='india' ? 1.4 : regionId==='uk' ? 0.6 : 1.0;
-  const rPersist= regionId==='uk'    ? 0.7 : 1.0; // UK states fade slower
-
-  function sv2(base,var_,clVar){
-    return Math.max(0.05,Math.min(0.95,base+(var_-0.5)*tm*0.35*rVar*clVar));
+const HIST_LEN = 28;
+const history = {};
+const arrowHistory = {};
+REGIONS.forEach(r => {
+  history[r.id] = {a:[], m:[], n:[]};
+  arrowHistory[r.id] = [];
+  for(let i=0;i<HIST_LEN;i++){
+    history[r.id].a.push(0.5);
+    history[r.id].m.push(0);
+    history[r.id].n.push(0.3);
   }
+});
 
-  const rawSV=sn(1*rFreq,s)*0.8+nz(1,s)*0.2;
-  const rawMV=sn(1.4*rFreq,s)*0.75+nz(2,s)*0.25;
-
-  // ── Cluster-specific temporal bias ───────────────────────────
-  // anxiety:    S leads M (positive ld) — anticipatory
-  // confidence: co-incident (ld near zero) — concurrent
-  // aspiration: M leads S (negative ld) — lagging desire
-  // constraint: M strongly leads S — reactive, persistent
-  const lagBias    = {anxiety:6, confidence:0, aspiration:-5, constraint:-9};
-  const lagRange   = {anxiety:8, confidence:4, aspiration:6,  constraint:4};
-  const clVolatility={anxiety:1.3,confidence:0.8,aspiration:1.2,constraint:0.6};
-
-  function makeLd(cl){
-    const bias=lagBias[cl]||0, range=lagRange[cl]||8;
-    return Math.round(bias+(sn(9+Object.keys(lagBias).indexOf(cl),s)-0.5)*range*rPersist);
-  }
-
-  // ── Cluster-specific narrative velocity range ─────────────────
-  // anxiety: high velocity, fast-changing
-  // confidence: moderate, steady
-  // aspiration: moderate, positive bias
-  // constraint: low velocity — stories fade here
-  const nvelScale={anxiety:1.3,confidence:0.9,aspiration:1.0,constraint:0.5};
-  const nvelBias ={anxiety:0,  confidence:0.1,aspiration:0.15,constraint:-0.1};
-
-  function makeNvel(cl,seedOff){
-    const scale=nvelScale[cl]||1, bias=nvelBias[cl]||0;
-    return Math.max(-1,Math.min(1,(sn(seedOff,s)*2-1)*tm*scale+bias));
-  }
-
-  const themeBase=THEMES[sc][REGIONS[ri].id];
-  const themes=themeBase.map((t,i)=>({
-    label:t.label,
-    volume:Math.max(0.1,sn(30+i+ri*7,s)*0.8+nz(20+i,s)*0.2),
-    velocity:(sn(40+i+ri*5,s)*2-1)*tm,
-  })).sort((a,b)=>b.volume-a.volume).slice(0,3);
-
-  const result = {
-    anxiety:{
-      sv:sv2(rawSV,nz(1,s),clVolatility.anxiety),
-      sc2:0.55+sn(5,s)*0.3,
-      mv:sv2(rawMV,nz(2,s),clVolatility.anxiety),
-      mc:0.65+sn(6,s)*0.25,
-      nv:sn(4*rFreq,s)*0.9+nz(9,s)*0.1,
-      nc:0.5+sn(17,s)*0.35,
-      nvel:makeNvel('anxiety',18),
-      ndir:sn(19,s)*Math.PI*2,
-      lead:sn(1.2*rFreq,s),conc:sn(1*rFreq,s)*0.9,lag:sn(0.8*rFreq,s)*0.7,
-      ld:makeLd('anxiety'),themes},
-    confidence:{
-      sv:sv2(1-rawSV,nz(3,s),clVolatility.confidence),
-      sc2:0.6+sn(7,s)*0.3,
-      mv:sv2(1-rawMV*0.9,nz(4,s),clVolatility.confidence),
-      mc:0.7+sn(8,s)*0.2,
-      nv:(1-sn(4.2*rFreq,s))*0.8+nz(10,s)*0.2,
-      nc:0.55+sn(20,s)*0.3,
-      nvel:makeNvel('confidence',21),
-      ndir:sn(22,s)*Math.PI*2,
-      lead:1-sn(1.3*rFreq,s),conc:(1-sn(1*rFreq,s))*0.85,lag:(1-sn(0.9*rFreq,s))*0.75,
-      ld:makeLd('confidence'),themes},
-    aspiration:{
-      sv:sv2(sn(3*rFreq,s)*0.75,nz(5,s),clVolatility.aspiration),
-      sc2:0.45+sn(11,s)*0.35,
-      mv:sv2(sn(3.3*rFreq,s)*0.7,nz(6,s),clVolatility.aspiration),
-      mc:0.55+sn(12,s)*0.3,
-      nv:sn(5*rFreq,s)*0.85+nz(11,s)*0.15,
-      nc:0.45+sn(23,s)*0.4,
-      nvel:makeNvel('aspiration',24),
-      ndir:sn(25,s)*Math.PI*2,
-      lead:sn(3.2*rFreq,s),conc:sn(3*rFreq,s)*0.8,lag:sn(2.8*rFreq,s)*0.65,
-      ld:makeLd('aspiration'),themes},
-    constraint:{
-      sv:sv2(sn(2*rFreq,s)*0.65,nz(7,s),clVolatility.constraint),
-      sc2:0.5+sn(14,s)*0.3,
-      mv:sv2(sn(2.2*rFreq,s)*0.6,nz(8,s),clVolatility.constraint),
-      mc:0.6+sn(15,s)*0.25,
-      nv:sn(6*rFreq,s)*0.7+nz(12,s)*0.3,
-      nc:0.5+sn(26,s)*0.35,
-      nvel:makeNvel('constraint',27),
-      ndir:sn(28,s)*Math.PI*2,
-      lead:sn(2.1*rFreq,s),conc:sn(2*rFreq,s)*0.75,lag:sn(1.9*rFreq,s)*0.6,
-      ld:makeLd('constraint'),themes},
-  };
-
-  // apply narrative force
-  ['anxiety','confidence','aspiration','constraint'].forEach(cl => {
-    if (!result[cl]) return;
-    const forced = applyNarrativeForce(result[cl]);
-    result[cl].sv = forced.sv;
-    result[cl].mv = forced.mv;
-    result[cl]._dispersion = forced.dispersion;
-  });
-
-  return result;
+// ═══════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════
+function randn(){
+  const u=Math.random(),v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
 }
 
-function getES(cv){const d=cv.sv-cv.mv,l=cv.ld;if(Math.abs(d)>0.3)return ES[3];if(Math.abs(d)<0.08&&Math.abs(l)<3)return ES[1];if(l>4)return ES[0];if(l<-4)return ES[2];if(cv.sv>0.6&&cv.mv>0.6)return ES[4];return ES[1];}
-function getNS(cv){if(cv.nvel>0.35)return NS[0];if(cv.nvel<-0.35)return NS[2];return NS[1];}
-function isSignal(cv){return Math.abs(cv.sv-cv.mv)>0.3&&cv.nvel>0.35;}
-function themeArrow(vel){if(vel>0.2)return'↑';if(vel<-0.2)return'↓';return'→';}
+function sigmoid(x){
+  return 1/(1+Math.exp(-Math.max(-10,Math.min(10,x))));
+}
+
+function hexToRgb(hex){
+  const n=parseInt(hex.slice(1),16);
+  return [(n>>16)&255,(n>>8)&255,n&255];
+}
+
+function rgbToHex(r,g,b){
+  return '#'+[r,g,b].map(x=>Math.round(x).toString(16).padStart(2,'0')).join('');
+}
+
+function lerpColor(c1,c2,t){
+  const a=hexToRgb(c1), b=hexToRgb(c2);
+  return rgbToHex(a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SIGNAL LAYER
+// ═══════════════════════════════════════════════════════════════
+class EMA {
+  constructor(alpha=0.25){
+    this.alpha = alpha;
+    this.value = null;
+  }
+  next(x){
+    if(this.value===null){this.value=x; return x;}
+    this.value = this.alpha*x + (1-this.alpha)*this.value;
+    return this.value;
+  }
+}
+
+class Derivative {
+  constructor(){this.prev=null;}
+  next(x){
+    if(this.prev===null){this.prev=x; return 0;}
+    const d = x-this.prev;
+    this.prev = x;
+    return d;
+  }
+}
+
+class RollingStd {
+  constructor(window=12){
+    this.window = window;
+    this.buf = [];
+  }
+  next(x){
+    this.buf.push(x);
+    if(this.buf.length>this.window) this.buf.shift();
+    if(this.buf.length<2) return 0;
+    const mean = this.buf.reduce((a,b)=>a+b,0)/this.buf.length;
+    const variance = this.buf.reduce((a,b)=>a+(b-mean)**2,0)/this.buf.length;
+    return Math.sqrt(variance);
+  }
+}
+
+class RegionSignalProcessor {
+  constructor(){
+    this.a_ema = new EMA(0.25);
+    this.m_ema = new EMA(0.25);
+    this.n_ema = new EMA(0.25);
+    this.dm = new Derivative();
+    this.dn = new Derivative();
+    this.v = new RollingStd(12);
+    this.buf_a=[]; this.buf_m=[]; this.buf_dm=[];
+    this.buf_n=[]; this.buf_dn=[]; this.buf_v=[];
+    this.W = 80;
+  }
+  _push(buf,x){
+    buf.push(x);
+    if(buf.length>this.W) buf.shift();
+  }
+  _norm(buf,x){
+    if(buf.length<3) return 0;
+    const mean = buf.reduce((a,b)=>a+b,0)/buf.length;
+    const std = Math.sqrt(buf.reduce((a,b)=>a+(b-mean)**2,0)/buf.length) || 1e-6;
+    return (x-mean)/std;
+  }
+  process(a_raw,m_raw,n_raw){
+    const a = this.a_ema.next(a_raw);
+    const m = this.m_ema.next(m_raw);
+    const n = this.n_ema.next(n_raw);
+    const dm = this.dm.next(m);
+    const dn = this.dn.next(n);
+    const dm_c = Math.max(-1.0,Math.min(1.0,dm));
+    const dn_c = Math.max(-1.0,Math.min(1.0,dn));
+    const v = this.v.next(m);
+    this._push(this.buf_a,a);
+    this._push(this.buf_m,m);
+    this._push(this.buf_dm,dm_c);
+    this._push(this.buf_n,n);
+    this._push(this.buf_dn,dn_c);
+    this._push(this.buf_v,v);
+    return {
+      a,m,n,
+      dm:dm_c, dn:dn_c, v,
+      a_norm:  this._norm(this.buf_a,  a),
+      m_norm:  this._norm(this.buf_m,  m),
+      dm_norm: this._norm(this.buf_dm, dm_c),
+      n_norm:  this._norm(this.buf_n,  n),
+      dn_norm: this._norm(this.buf_dn, dn_c),
+      v_norm:  this._norm(this.buf_v,  v)
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DYNAMICS LAYER
+// ═══════════════════════════════════════════════════════════════
+function computeDynamics(a_norm,m_norm,n_norm,dm_norm,dn_norm,v_norm){
+  const psi = 0.8*a_norm + 1.0*m_norm + 0.9*n_norm;
+  const a = 0.8;
+  const b = 0.6;
+  const k = 0.5;
+  const v_w = 0.4;
+
+  const p_bull_raw = sigmoid(psi + a*dm_norm);
+  const p_bear_raw = sigmoid(-psi + b*dn_norm);
+  const Z = p_bull_raw + p_bear_raw;
+  const p_bull = p_bull_raw/Z;
+  const p_bear = p_bear_raw/Z;
+
+  const tension = Math.abs(a_norm - m_norm) + k*Math.abs(dn_norm) + v_w*Math.max(0,v_norm);
+  const p_stag = sigmoid(tension - 1.0);
+  const H = -(p_bull*Math.log(p_bull+1e-12) + p_bear*Math.log(p_bear+1e-12));
+  const instability = p_stag + H;
+
+  let regime,label,color;
+  if(p_stag>0.5){regime='stag'; label='instability'; color=STAG_COLOR;}
+  else if(p_bull>p_bear){regime='bull'; label='expansion'; color=BULL_COLOR;}
+  else {regime='bear'; label='contraction'; color=BEAR_COLOR;}
+
+  return {psi,p_bull,p_bear,p_stag,tension,H,instability,regime,label,color};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SIMULATION LAYER
+// ═══════════════════════════════════════════════════════════════
+const processors = {};
+const synthState = {};
+
+function initSystem(){
+  REGIONS.forEach(r=>{
+    processors[r.id] = new RegionSignalProcessor();
+    synthState[r.id] = {
+      latent: (Math.random()-0.5)*1.2,
+      target: (Math.random()-0.5)*0.8,
+      a_bias: Math.random()*0.3-0.15,
+      n_bias: Math.random()*0.2
+    };
+    for(let i=0;i<80;i++){
+      const raw = generateSyntheticRaw(r.id,true);
+      processors[r.id].process(raw.a,raw.m,raw.n);
+    }
+  });
+}
+
+function generateSyntheticRaw(regionId,warmup=false){
+  const st = synthState[regionId];
+  const tm = TH_MULT[timeHorizon];
+  if(Math.random()<0.02) st.target = (Math.random()-0.5)*1.6;
+  st.latent += 0.025*(st.target-st.latent)*tm + 0.12*randn()*Math.sqrt(tm);
+  st.latent = Math.max(-1.8,Math.min(1.8,st.latent));
+  const trend = Math.tanh(st.latent);
+  const a_raw = 0.5 + 0.35*trend + 0.06*randn() + st.a_bias;
+  const m_raw = 0.25*trend + 0.18*randn();
+  const n_raw = 0.25 + 0.45*Math.abs(trend) + 0.12*randn() + st.n_bias;
+  return {
+    a: Math.max(0.01,Math.min(0.99,a_raw)),
+    m: m_raw,
+    n: Math.max(0.01,Math.min(0.99,n_raw))
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DATA INTEGRATION
+// ═══════════════════════════════════════════════════════════════
+function getRegionState(ri){
+  const rg = REGIONS[ri];
+  const proc = processors[rg.id];
+  let a_raw,m_raw,n_raw;
+  let hasLive = false;
+
+  const mkt = window.liveMarkets?.[rg.id];
+  if(mkt && mkt.field_value!=null){m_raw = mkt.field_value; hasLive=true;}
+
+  const sent = window.liveSentiment?.[rg.id];
+  if(sent){
+    let sum=0,cnt=0;
+    for(const k in sent){if(sent[k]?.value!=null){sum+=sent[k].value;cnt++;}}
+    if(cnt){a_raw=sum/cnt; hasLive=true;}
+  }
+
+  const narr = window.liveNarrative?.[rg.id];
+  if(narr){
+    let sum=0,cnt=0;
+    for(const k in narr){if(narr[k]?.tone_normalised!=null){sum+=narr[k].tone_normalised;cnt++;}}
+    if(cnt){n_raw=sum/cnt; hasLive=true;}
+  }
+
+  if(!hasLive){
+    const syn = generateSyntheticRaw(rg.id);
+    a_raw=syn.a; m_raw=syn.m; n_raw=syn.n;
+  } else {
+    const syn = generateSyntheticRaw(rg.id);
+    if(a_raw==null) a_raw=syn.a;
+    if(m_raw==null) m_raw=syn.m;
+    if(n_raw==null) n_raw=syn.n;
+  }
+
+  const sig = proc.process(a_raw,m_raw,n_raw);
+  const dyn = computeDynamics(sig.a_norm,sig.m_norm,sig.n_norm,sig.dm_norm,sig.dn_norm,sig.v_norm);
+  return {sig,dyn,hasLive};
+}
+
+// cache to avoid double-processing per tick
+window._stateCache = null;
+function getAllRegionStates(){
+  if(!window._stateCache){
+    window._stateCache = REGIONS.map((_,i)=>getRegionState(i));
+  }
+  return window._stateCache;
+}
+function invalidateStateCache(){ window._stateCache = null; }
+
+// ═══════════════════════════════════════════════════════════════
+// RBF FIELD & ISOLINES
+// ═══════════════════════════════════════════════════════════════
+function evalPsiField(x,y,rgs,states){
+  let psi=0,wSum=0;
+  const sigma2=200*200;
+  for(let i=0;i<rgs.length;i++){
+    const dx=x-rgs[i].px,dy=y-rgs[i].py;
+    const w=Math.exp(-(dx*dx+dy*dy)/(2*sigma2));
+    psi+=states[i].dyn.psi*w;
+    wSum+=w;
+  }
+  return wSum>0.001?psi/wSum:0;
+}
+
+function drawPsiContour(ctx,w,h,rgs,states){
+  ctx.fillStyle=isDark?'rgba(180,180,180,0.04)':'rgba(60,60,60,0.04)';
+  const step=6;
+  for(let y=0;y<h;y+=step){
+    let prev=evalPsiField(0,y,rgs,states);
+    for(let x=step;x<w;x+=step){
+      const curr=evalPsiField(x,y,rgs,states);
+      if(prev*curr<=0&&Math.abs(prev-curr)>0.005){
+        const t=prev/(prev-curr);
+        ctx.fillRect(x-step+t*step,y,1.5,1.5);
+      }
+      prev=curr;
+    }
+  }
+  for(let x=0;x<w;x+=step){
+    let prev=evalPsiField(x,0,rgs,states);
+    for(let y=step;y<h;y+=step){
+      const curr=evalPsiField(x,y,rgs,states);
+      if(prev*curr<=0&&Math.abs(prev-curr)>0.005){
+        const t=prev/(prev-curr);
+        ctx.fillRect(x,y-step+t*step,1.5,1.5);
+      }
+      prev=curr;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDERING LAYER
+// ═══════════════════════════════════════════════════════════════
+function getCoords(){
+  const el=document.getElementById('as-map'),r=el.getBoundingClientRect();
+  const sx=r.width/960,sy=r.height/480;
+  return REGIONS.map(rg=>{const[x,y]=proj([rg.lng,rg.lat]);return{...rg,px:x*sx,py:y*sy};});
+}
+
+function getFocusViewport(rg,rect){
+  const[x,y]=proj([rg.lng,rg.lat]);
+  const sx=rect.width/960,sy=rect.height/480;
+  const px=x*sx,py=y*sy;
+  const zoom=2.2;
+  const vx=px-rect.width/(2*zoom);
+  const vy=py-rect.height/(2*zoom);
+  return{zoom,vx,vy};
+}
 
 function drawSparkline(canvas,data,color,val){
   if(!canvas) return;
@@ -390,74 +548,120 @@ function drawSparkline(canvas,data,color,val){
   ctx.fill();
 }
 
-d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(w=>{
-  mapSvg.append('g').selectAll('path')
-    .data(topojson.feature(w,w.objects.countries).features)
-    .join('path').attr('d',d3.geoPath(proj))
-    .attr('fill',isDark?'#252525':'#e4e1d8')
-    .attr('stroke',isDark?'#333':'#ccc9bf')
-    .attr('stroke-width',0.35);
-  draw();
-}).catch(()=>draw());
-
-function getCoords(){
-  const el=document.getElementById('as-map'),r=el.getBoundingClientRect();
-  const sx=r.width/960,sy=r.height/480;
-  return REGIONS.map(rg=>{const[x,y]=proj([rg.lng,rg.lat]);return{...rg,px:x*sx,py:y*sy};});
+function drawUnifiedSparkline(canvas,histA,histM,histN){
+  if(!canvas) return;
+  const dpr=window.devicePixelRatio||1;
+  const w=canvas.offsetWidth||120,h=24;
+  canvas.width=w*dpr;canvas.height=h*dpr;
+  canvas.style.height=h+'px';
+  const ctx=canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  const pad=2;
+  function band(data,y0,y1,color){
+    if(!data||data.length<2) return;
+    const mn=Math.min(...data),mx=Math.max(...data),range=mx-mn||0.1;
+    const step=(w-pad*2)/(data.length-1);
+    ctx.beginPath();
+    data.forEach((v,i)=>{
+      const x=pad+i*step;
+      const y=y0+(1-(v-mn)/range)*(y1-y0);
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=color;ctx.lineWidth=1;ctx.globalAlpha=0.8;ctx.stroke();ctx.globalAlpha=1;
+  }
+  band(histA,2,8,A_COLOR);
+  band(histM,9,15,M_COLOR);
+  band(histN,16,22,N_COLOR);
 }
 
-function getFocusViewport(rg,rect){
-  const[x,y]=proj([rg.lng,rg.lat]);
-  const sx=rect.width/960,sy=rect.height/480;
-  const px=x*sx,py=y*sy;
-  const zoom=2.2;
-  const vx=px-rect.width/(2*zoom);
-  const vy=py-rect.height/(2*zoom);
-  return{zoom,vx,vy};
-}
-
-function drawNarrative(ctx,rgs,ad,cl,opMult){
+function drawNarrative(ctx,rgs,states){
   rgs.forEach((rg,i)=>{
     if(focusRegion&&focusRegion!==rg.id) return;
-    const cv=ad[i][sc];
-    const nv=cv.nv,vel=cv.nvel;
+    const st=states[i], sig=st.sig;
+    const nv=sig.n, vel=sig.dn;
     const{px,py}=rg;
     const num=3+Math.round(nv*3);
     const baseLen=16+nv*22;
     const velScale=1+Math.abs(vel)*1.3;
-    const spread=vel>0.3?0.35:vel<-0.3?0.12:0.25;
-    const op=opMult||0.7;
-
-    // direction encodes tone velocity: up = positive, down = negative, flat = neutral
+    const spread=vel>0.15?0.35:vel<-0.15?0.12:0.25;
     const velAngle=vel>0.1?-Math.PI*0.35:vel<-0.1?Math.PI*0.35:0;
-
-    // colour matches active cluster narrative colour
-    const nColor=cl.nC||'#A855C8';
-
+    const currentArrows=[];
     for(let a=0;a<num;a++){
       const angle=velAngle+(a-(num-1)/2)*spread*(Math.PI/num);
       const len=baseLen*velScale*(0.75+a*0.08);
       const startR=10+nv*6;
       const sx2=px+Math.cos(angle)*startR,sy2=py+Math.sin(angle)*startR;
       const ex=px+Math.cos(angle)*(startR+len),ey=py+Math.sin(angle)*(startR+len);
-      const alpha=(0.45+nv*0.4)*op;
-      ctx.beginPath();ctx.moveTo(sx2,sy2);ctx.lineTo(ex,ey);
-      ctx.strokeStyle=nColor+Math.round(alpha*0.65*255).toString(16).padStart(2,'0');
-      ctx.lineWidth=0.75+nv*0.5;
-      ctx.setLineDash(vel>0.3?[]:[2,3]);ctx.stroke();ctx.setLineDash([]);
-      const al=5+nv*2.5,aa=0.38;
-      ctx.beginPath();
-      ctx.moveTo(ex,ey);ctx.lineTo(ex-Math.cos(angle-aa)*al,ey-Math.sin(angle-aa)*al);
-      ctx.moveTo(ex,ey);ctx.lineTo(ex-Math.cos(angle+aa)*al,ey-Math.sin(angle+aa)*al);
-      ctx.strokeStyle=nColor+Math.round(alpha*255).toString(16).padStart(2,'0');
-      ctx.lineWidth=0.85;ctx.stroke();
+      const alpha=0.45+nv*0.4;
+      const lw=0.75+nv*0.5;
+      currentArrows.push({sx2,sy2,ex,ey,angle,alpha,lw,dashed:vel>0.2});
     }
+    arrowHistory[rg.id].push(currentArrows);
+    if(arrowHistory[rg.id].length>4) arrowHistory[rg.id].shift();
+    arrowHistory[rg.id].forEach((frame,fi)=>{
+      const isCurrent=fi===arrowHistory[rg.id].length-1;
+      const age=arrowHistory[rg.id].length-1-fi;
+      const decay=isCurrent?1.0:Math.max(0.04,0.18-age*0.045);
+      frame.forEach(arr=>{
+        ctx.beginPath();ctx.moveTo(arr.sx2,arr.sy2);ctx.lineTo(arr.ex,arr.ey);
+        ctx.strokeStyle=N_COLOR+Math.round(arr.alpha*0.65*255*decay).toString(16).padStart(2,'0');
+        ctx.lineWidth=arr.lw*decay;
+        ctx.setLineDash(arr.dashed?[]:[2,3]);ctx.stroke();ctx.setLineDash([]);
+        const al=5*decay,aa=0.38;
+        ctx.beginPath();
+        ctx.moveTo(arr.ex,arr.ey);ctx.lineTo(arr.ex-Math.cos(arr.angle-aa)*al,arr.ey-Math.sin(arr.angle-aa)*al);
+        ctx.moveTo(arr.ex,arr.ey);ctx.lineTo(arr.ex-Math.cos(arr.angle+aa)*al,arr.ey-Math.sin(arr.angle+aa)*al);
+        ctx.strokeStyle=N_COLOR+Math.round(arr.alpha*255*decay).toString(16).padStart(2,'0');
+        ctx.lineWidth=0.85*decay;ctx.stroke();
+      });
+    });
     const pR=7+nv*8;
     const pg=ctx.createRadialGradient(px,py,0,px,py,pR);
-    pg.addColorStop(0,nColor+'44');pg.addColorStop(0.6,nColor+'18');pg.addColorStop(1,nColor+'00');
+    pg.addColorStop(0,N_COLOR+'44');pg.addColorStop(0.6,N_COLOR+'18');pg.addColorStop(1,N_COLOR+'00');
     ctx.beginPath();ctx.arc(px,py,pR,0,Math.PI*2);ctx.fillStyle=pg;ctx.fill();
   });
 }
+
+function drawFragBlooms(ctx,cx,cy,baseR,color,count,dist,isRect){
+  for(let i=0;i<count;i++){
+    const a=i*(Math.PI*2/count)+0.3;
+    const fx=cx+Math.cos(a)*dist;
+    const fy=cy+Math.sin(a)*dist;
+    const r=baseR*0.55;
+    if(!isRect){
+      const g=ctx.createRadialGradient(fx,fy,0,fx,fy,r);
+      g.addColorStop(0,color+'ff');g.addColorStop(1,color+'44');
+      ctx.beginPath();ctx.arc(fx,fy,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    }else{
+      const cr=r*0.35;
+      ctx.beginPath();
+      ctx.moveTo(fx-r+cr,fy-r);ctx.lineTo(fx+r-cr,fy-r);ctx.arcTo(fx+r,fy-r,fx+r,fy-r+cr,cr);
+      ctx.lineTo(fx+r,fy+r-cr);ctx.arcTo(fx+r,fy+r,fx+r-cr,fy+r,cr);
+      ctx.lineTo(fx-r+cr,fy+r);ctx.arcTo(fx-r,fy+r,fx-r,fy+r-cr,cr);
+      ctx.lineTo(fx-r,fy-r+cr);ctx.arcTo(fx-r,fy-r,fx-r+cr,fy-r,cr);ctx.closePath();
+      const g=ctx.createRadialGradient(fx,fy,0,fx,fy,r);
+      g.addColorStop(0,color+'ee');g.addColorStop(1,color+'33');
+      ctx.fillStyle=g;ctx.fill();
+    }
+  }
+}
+
+function updateRegimeCursor(states){
+  const cursor=document.getElementById('regime-cursor');
+  if(!cursor) return;
+  let wSum=0,bSum=0,brSum=0;
+  states.forEach(st=>{
+    const w=Math.abs(st.dyn.psi)+st.dyn.p_stag;
+    wSum+=w;
+    bSum+=w*st.dyn.p_bull;
+    brSum+=w*st.dyn.p_bear;
+  });
+  const t=brSum/(bSum+brSum+1e-9);
+  cursor.style.left=(t*100)+'%';
+}
+
+let viewState={zoom:1,vx:0,vy:0};
 
 function draw(){
   const el=document.getElementById('as-map'),rect=el.getBoundingClientRect();
@@ -467,196 +671,273 @@ function draw(){
   cv2.style.width=rect.width+'px';cv2.style.height=rect.height+'px';
   const ctx=cv2.getContext('2d');
   ctx.scale(dpr,dpr);
-  ctx.clearRect(0,0,rect.width,rect.height);
 
-  // focus transform
-  if(focusRegion){
-    const frg=REGIONS.find(r=>r.id===focusRegion);
-    const fv=getFocusViewport(frg,rect);
-    ctx.save();
-    ctx.translate(-fv.vx*fv.zoom,-fv.vy*fv.zoom);
-    ctx.scale(fv.zoom,fv.zoom);
-  }
+  // ghost trails
+  const bgRGB=isDark?'20,20,20':'245,243,238';
+  ctx.fillStyle=`rgba(${bgRGB},0.08)`;
+  ctx.fillRect(0,0,rect.width,rect.height);
 
   const rgs=getCoords();
-  const ad=REGIONS.map((_,i)=>gd(i));
-  const cl=CLUSTERS.find(c=>c.id===sc);
+  const states=getAllRegionStates();
   const sf=rect.width/960;
-  const uncMult=showUncertainty?1.3:1.0;
-  const opBase=showUncertainty?0.7:1.0;
+  updateRegimeCursor(states);
+
+  // focus momentum
+  const target=focusRegion?getFocusViewport(REGIONS.find(r=>r.id===focusRegion),rect):{zoom:1,vx:0,vy:0};
+  viewState.zoom+=(target.zoom-viewState.zoom)*0.12;
+  viewState.vx+=(target.vx-viewState.vx)*0.12;
+  viewState.vy+=(target.vy-viewState.vy)*0.12;
+  const transformed=Math.abs(viewState.zoom-1)>0.005||Math.abs(viewState.vx)>0.5||Math.abs(viewState.vy)>0.5;
+  if(transformed){
+    ctx.save();
+    ctx.translate(-viewState.vx*viewState.zoom,-viewState.vy*viewState.zoom);
+    ctx.scale(viewState.zoom,viewState.zoom);
+  }
+
+  // RBF isoline (Ψ = 0)
+  if(!focusRegion){
+    drawPsiContour(ctx,rect.width,rect.height,rgs,states);
+  }
 
   rgs.forEach((rg,i)=>{
+    const st=states[i],sig=st.sig,dyn=st.dyn;
     const isFocused=!focusRegion||focusRegion===rg.id;
     const dimAlpha=isFocused?1.0:0.25;
-    const d=ad[i][sc],{px,py}=rg;
-    const sv=d.sv,mv=d.mv,sc2=d.sc2,mc=d.mc,ld=d.ld;
-    const ox=ld*1.8*sf,oy=ld*0.65*sf;
-    const spx=px-ox*0.5,spy=py-oy*0.5;
-    const mpx=px+ox*0.5,mpy=py+oy*0.5;
+    const{px,py}=rg;
 
-    ctx.globalAlpha=opBase*dimAlpha;
-    const sR=11+sv*18,sO=sR*(1.8+(1-sc2)*2.0)*uncMult;
-    const g1=ctx.createRadialGradient(spx,spy,0,spx,spy,sO);
-    g1.addColorStop(0,cl.sC+'bb');g1.addColorStop(0.2,cl.sC+'66');g1.addColorStop(0.5,cl.sC+'22');g1.addColorStop(1,cl.sC+'00');
-    ctx.beginPath();ctx.arc(spx,spy,sO,0,Math.PI*2);ctx.fillStyle=g1;ctx.fill();
-    if(showUncertainty||sc2<0.65){ctx.beginPath();ctx.arc(spx,spy,sO*0.8,0,Math.PI*2);ctx.setLineDash([2,3]);ctx.strokeStyle=cl.sC+'40';ctx.lineWidth=0.7;ctx.stroke();ctx.setLineDash([]);}
-    const gc=ctx.createRadialGradient(spx,spy,0,spx,spy,sR);
-    gc.addColorStop(0,cl.sC+'ff');gc.addColorStop(0.6,cl.sC+'cc');gc.addColorStop(1,cl.sC+'44');
-    ctx.beginPath();ctx.arc(spx,spy,sR,0,Math.PI*2);ctx.fillStyle=gc;ctx.fill();
+    const t=dyn.p_bear/(dyn.p_bull+dyn.p_bear+1e-9);
+    const regimeColor=lerpColor(BULL_COLOR,BEAR_COLOR,t);
+    const visInstability=Math.min(1,dyn.instability/1.6);
+    const stagDiff=1+visInstability*2.0;
+    const jitter=visInstability*2.5;
+    let aColor=lerpColor(regimeColor,A_COLOR,0.35);
+    let mColor=lerpColor(regimeColor,M_COLOR,0.35);
 
-    const mR=8+mv*15,mO=mR*(1.5+(1-mc)*1.7)*uncMult;
-    const g2=ctx.createRadialGradient(mpx,mpy,0,mpx,mpy,mO);
-    g2.addColorStop(0,cl.mC+'aa');g2.addColorStop(0.25,cl.mC+'55');g2.addColorStop(0.6,cl.mC+'1a');g2.addColorStop(1,cl.mC+'00');
-    ctx.beginPath();ctx.arc(mpx,mpy,mO,0,Math.PI*2);ctx.fillStyle=g2;ctx.fill();
-    const cr=mR*0.35;
-    ctx.beginPath();
-    ctx.moveTo(mpx-mR+cr,mpy-mR);ctx.lineTo(mpx+mR-cr,mpy-mR);ctx.arcTo(mpx+mR,mpy-mR,mpx+mR,mpy-mR+cr,cr);
-    ctx.lineTo(mpx+mR,mpy+mR-cr);ctx.arcTo(mpx+mR,mpy+mR,mpx+mR-cr,mpy+mR,cr);
-    ctx.lineTo(mpx-mR+cr,mpy+mR);ctx.arcTo(mpx-mR,mpy+mR,mpx-mR,mpy+mR-cr,cr);
-    ctx.lineTo(mpx-mR,mpy-mR+cr);ctx.arcTo(mpx-mR,mpy-mR,mpx-mR+cr,mpy-mR,cr);ctx.closePath();
-    const gm=ctx.createRadialGradient(mpx,mpy,0,mpx,mpy,mR);
-    gm.addColorStop(0,cl.mC+'ee');gm.addColorStop(0.7,cl.mC+'99');gm.addColorStop(1,cl.mC+'33');
-    ctx.fillStyle=gm;ctx.fill();
+    if(dyn.instability>0.5){
+      const grey='#888888';
+      const desat=0.2*visInstability;
+      aColor=lerpColor(aColor,grey,desat);
+      mColor=lerpColor(mColor,grey,desat);
+    }
+
+    const aR=11+sig.a*18;
+    const aO=aR*(1.6+visInstability*2.2)*stagDiff;
+    const jx=(Math.random()-0.5)*jitter;
+    const jy=(Math.random()-0.5)*jitter;
+    const apx=px-dyn.psi*2*sf+jx;
+    const apy=py-dyn.psi*sf+jy;
+
+    ctx.globalAlpha=(0.9-visInstability*0.3)*dimAlpha;
+
+    if(dyn.instability>0.6){
+      const fragCount=2+Math.floor(dyn.H*3);
+      const fd=3+dyn.H*5;
+      drawFragBlooms(ctx,apx,apy,aR,aColor,fragCount,fd,false);
+      const g1=ctx.createRadialGradient(apx,apy,0,apx,apy,aR*0.4);
+      g1.addColorStop(0,aColor+'88');g1.addColorStop(1,aColor+'22');
+      ctx.beginPath();ctx.arc(apx,apy,aR*0.4,0,Math.PI*2);ctx.fillStyle=g1;ctx.fill();
+    }else{
+      const g1=ctx.createRadialGradient(apx,apy,0,apx,apy,aO);
+      g1.addColorStop(0,aColor+'aa');g1.addColorStop(0.25,aColor+'55');g1.addColorStop(0.6,aColor+'18');g1.addColorStop(1,aColor+'00');
+      ctx.beginPath();ctx.arc(apx,apy,aO,0,Math.PI*2);ctx.fillStyle=g1;ctx.fill();
+
+      if(visInstability>0.35||showUncertainty){
+        ctx.beginPath();ctx.arc(apx,apy,aO*0.75,0,Math.PI*2);
+        ctx.setLineDash([2,3]);
+        ctx.strokeStyle=STAG_COLOR+Math.round(visInstability*120).toString(16).padStart(2,'0');
+        ctx.lineWidth=0.7;ctx.stroke();ctx.setLineDash([]);
+      }
+
+      const gc=ctx.createRadialGradient(apx,apy,0,apx,apy,aR);
+      gc.addColorStop(0,aColor+'ff');gc.addColorStop(0.6,aColor+'cc');gc.addColorStop(1,aColor+'44');
+      ctx.beginPath();ctx.arc(apx,apy,aR,0,Math.PI*2);ctx.fillStyle=gc;ctx.fill();
+    }
+
+    const mR=8+sig.m*15;
+    const mO=mR*(1.4+visInstability*1.8)*stagDiff;
+    const mpx=px+dyn.psi*2*sf-jx;
+    const mpy=py+dyn.psi*sf-jy;
+
+    if(dyn.instability>0.6){
+      const fragCount=2+Math.floor(dyn.H*3);
+      const fd=3+dyn.H*5;
+      drawFragBlooms(ctx,mpx,mpy,mR,mColor,fragCount,fd,true);
+      const g2=ctx.createRadialGradient(mpx,mpy,0,mpx,mpy,mR*0.4);
+      g2.addColorStop(0,mColor+'88');g2.addColorStop(1,mColor+'22');
+      ctx.beginPath();ctx.arc(mpx,mpy,mR*0.4,0,Math.PI*2);ctx.fillStyle=g2;ctx.fill();
+    }else{
+      const g2=ctx.createRadialGradient(mpx,mpy,0,mpx,mpy,mO);
+      g2.addColorStop(0,mColor+'aa');g2.addColorStop(0.25,mColor+'55');g2.addColorStop(0.6,mColor+'1a');g2.addColorStop(1,mColor+'00');
+      ctx.beginPath();ctx.arc(mpx,mpy,mO,0,Math.PI*2);ctx.fillStyle=g2;ctx.fill();
+
+      const cr=mR*0.35;
+      ctx.beginPath();
+      ctx.moveTo(mpx-mR+cr,mpy-mR);ctx.lineTo(mpx+mR-cr,mpy-mR);ctx.arcTo(mpx+mR,mpy-mR,mpx+mR,mpy-mR+cr,cr);
+      ctx.lineTo(mpx+mR,mpy+mR-cr);ctx.arcTo(mpx+mR,mpy+mR,mpx+mR-cr,mpy+mR,cr);
+      ctx.lineTo(mpx-mR+cr,mpy+mR);ctx.arcTo(mpx-mR,mpy+mR,mpx-mR,mpy+mR-cr,cr);
+      ctx.lineTo(mpx-mR,mpy-mR+cr);ctx.arcTo(mpx-mR,mpy-mR,mpx-mR+cr,mpy-mR,cr);ctx.closePath();
+      const gm=ctx.createRadialGradient(mpx,mpy,0,mpx,mpy,mR);
+      gm.addColorStop(0,mColor+'ee');gm.addColorStop(0.7,mColor+'99');gm.addColorStop(1,mColor+'33');
+      ctx.fillStyle=gm;ctx.fill();
+    }
     ctx.globalAlpha=1;
 
-    const e=getES(d),diff=Math.abs(sv-mv);
-    ctx.globalAlpha=dimAlpha;
-    if(diff>0.15||Math.abs(ld)>3){
-      ctx.beginPath();ctx.moveTo(spx,spy);ctx.lineTo(mpx,mpy);
-      const a=Math.min(0.6,diff+Math.abs(ld)*0.03);
-      ctx.strokeStyle=e.color+Math.round(a*180).toString(16).padStart(2,'0');
-      ctx.setLineDash([2,3]);ctx.lineWidth=0.85;ctx.stroke();ctx.setLineDash([]);
+    const diff=Math.abs(sig.a_norm-sig.m_norm);
+    if(diff>0.2||visInstability>0.25){
+      ctx.beginPath();ctx.moveTo(apx,apy);ctx.lineTo(mpx,mpy);
+      const alpha=Math.min(0.6,diff*0.5+visInstability*0.4);
+      ctx.strokeStyle=regimeColor+Math.round(alpha*180).toString(16).padStart(2,'0');
+      const dash=visInstability>0.45?[1,4]:visInstability>0.25?[2,3]:[2,2];
+      ctx.setLineDash(dash);ctx.lineWidth=0.85;ctx.stroke();ctx.setLineDash([]);
     }
-    if(isSignal(d)){
-      const sigR=Math.max(sR,mR)+14;
+
+    if(visInstability>0.5||diff>0.5){
+      const sigR=Math.max(aR,mR)+14;
       ctx.beginPath();ctx.arc(px,py,sigR,0,Math.PI*2);
-      ctx.strokeStyle='#C9404066';ctx.lineWidth=1.2;ctx.setLineDash([3,4]);ctx.stroke();ctx.setLineDash([]);
+      ctx.strokeStyle=STAG_COLOR+'55';ctx.lineWidth=1.2;ctx.setLineDash([3,4]);ctx.stroke();ctx.setLineDash([]);
     }
+
     if(focusRegion===rg.id){
-      ctx.beginPath();ctx.arc(px,py,Math.max(sR,mR)+10,0,Math.PI*2);
-      ctx.strokeStyle=rg.color;ctx.lineWidth=1.5;ctx.globalAlpha=0.7;ctx.stroke();
+      ctx.beginPath();ctx.arc(px,py,Math.max(aR,mR)+10,0,Math.PI*2);
+      ctx.strokeStyle=regimeColor;ctx.lineWidth=1.5;ctx.globalAlpha=0.7;ctx.stroke();ctx.globalAlpha=1;
     }
-    ctx.globalAlpha=1;
   });
 
-  drawNarrative(ctx,rgs,ad,cl,opBase);
+  drawNarrative(ctx,rgs,states);
 
-  // cross-regional propagation
   if(!focusRegion){
     rgs.forEach((r1,i)=>rgs.forEach((r2,j)=>{
       if(j<=i) return;
-      const d1=ad[i][sc],d2=ad[j][sc];
-      const nDiff=d1.nv-d2.nv;
-      if(Math.abs(nDiff)>0.35){
+      const n1=states[i].sig.n,n2=states[j].sig.n;
+      const nDiff=n1-n2;
+      if(Math.abs(nDiff)>0.25){
         const from=nDiff>0?r1:r2,to=nDiff>0?r2:r1;
-        ctx.beginPath();ctx.moveTo(from.px,from.py);ctx.lineTo(to.px,to.py);
-        ctx.setLineDash([1,5]);ctx.strokeStyle='#A855C840';ctx.lineWidth=0.6;ctx.stroke();ctx.setLineDash([]);
-        const mx=(from.px+to.px)*0.5,my=(from.py+to.py)*0.5;
-        const angle=Math.atan2(to.py-from.py,to.px-from.px);
+        const fromIdx=nDiff>0?i:j;
+        const arcColor=lerpColor(N_COLOR,states[fromIdx].dyn.color,0.2);
+        const arcWidth=0.5+Math.min(2,Math.abs(nDiff)*2);
+        const mx=(from.px+to.px)*0.5;
+        const my=(from.py+to.py)*0.5+Math.abs(to.px-from.px)*0.08;
+        ctx.beginPath();ctx.moveTo(from.px,from.py);ctx.quadraticCurveTo(mx,my,to.px,to.py);
+        ctx.setLineDash([1,5]);ctx.strokeStyle=arcColor+'40';ctx.lineWidth=arcWidth;ctx.stroke();ctx.setLineDash([]);
+        const t=0.5;
+        const ax=(1-t)*(1-t)*from.px+2*(1-t)*t*mx+t*t*to.px;
+        const ay=(1-t)*(1-t)*from.py+2*(1-t)*t*my+t*t*to.py;
+        const tx=2*(1-t)*(mx-from.px)+2*t*(to.px-mx);
+        const ty=2*(1-t)*(my-from.py)+2*t*(to.py-my);
+        const angle=Math.atan2(ty,tx);
         const al=5,aa=0.4;
         ctx.beginPath();
-        ctx.moveTo(mx+Math.cos(angle)*al,my+Math.sin(angle)*al);
-        ctx.lineTo(mx+Math.cos(angle)*al-Math.cos(angle-aa)*al*0.7,my+Math.sin(angle)*al-Math.sin(angle-aa)*al*0.7);
-        ctx.moveTo(mx+Math.cos(angle)*al,my+Math.sin(angle)*al);
-        ctx.lineTo(mx+Math.cos(angle)*al-Math.cos(angle+aa)*al*0.7,my+Math.sin(angle)*al-Math.sin(angle+aa)*al*0.7);
-        ctx.strokeStyle='#A855C860';ctx.lineWidth=0.7;ctx.stroke();
+        ctx.moveTo(ax,ay);ctx.lineTo(ax-Math.cos(angle-aa)*al,ay-Math.sin(angle-aa)*al);
+        ctx.moveTo(ax,ay);ctx.lineTo(ax-Math.cos(angle+aa)*al,ay-Math.sin(angle+aa)*al);
+        ctx.strokeStyle=arcColor+'60';ctx.lineWidth=Math.max(0.5,arcWidth*0.9);ctx.stroke();
       }
     }));
   }
 
   rgs.forEach((rg,i)=>{
-    const d=ad[i][sc],e=getES(d),ns=getNS(d);
+    const st=states[i],dyn=st.dyn;
     const isFocused=!focusRegion||focusRegion===rg.id;
     ctx.globalAlpha=isFocused?1:0.3;
     const{px,py}=rg;
-    const sR=11+d.sv*18,mR=8+d.mv*15;
+    const aR=11+st.sig.a*18,mR=8+st.sig.m*15;
     const tc=isDark?'rgba(255,255,255,0.88)':'rgba(15,15,15,0.82)';
-    const ly=py+Math.max(sR,mR)+d.nv*22+18;
+    const ly=py+Math.max(aR,mR)+st.sig.n*22+18;
     ctx.font='500 10px -apple-system,sans-serif';ctx.textAlign='center';
     ctx.fillStyle=tc;ctx.fillText(rg.short,px,ly);
     ctx.font='400 8px -apple-system,sans-serif';
-    ctx.fillStyle=e.color+'cc';ctx.fillText(e.label,px,ly+11);
-    ctx.fillStyle=ns.color+'99';ctx.fillText(ns.label,px,ly+21);
-    if(isSignal(d)){ctx.fillStyle='#C94040cc';ctx.fillText('⚠',px,ly+32);}
+    ctx.fillStyle=dyn.color+'cc';ctx.fillText(dyn.label,px,ly+11);
+    if(dyn.p_stag>0.5){ctx.fillStyle=STAG_COLOR+'cc';ctx.fillText('stag',px,ly+21);}
     ctx.globalAlpha=1;
   });
 
-  if(focusRegion) ctx.restore();
+  if(transformed) ctx.restore();
+}
+
+function getSignalText(dyn){
+  if(dyn.p_stag>0.5) return{text:'transition state — high instability',color:STAG_COLOR};
+  if(dyn.p_bull>0.8) return{text:'strong expansion — bull dominant',color:BULL_COLOR};
+  if(dyn.p_bear>0.8) return{text:'strong contraction — bear dominant',color:BEAR_COLOR};
+  if(dyn.p_bull>0.6) return{text:'expansion regime',color:BULL_COLOR};
+  if(dyn.p_bear>0.6) return{text:'contraction regime',color:BEAR_COLOR};
+  return{text:'mixed regime — monitoring',color:'#888888'};
 }
 
 function panels(){
   const con=document.getElementById('panels');
   con.innerHTML='';
-  const cl=CLUSTERS.find(c=>c.id===sc);
+  const states=getAllRegionStates();
+
   REGIONS.forEach((rg,ri)=>{
-    const d=gd(ri),cv=d[sc],e=getES(cv),ns=getNS(cv);
-    const sig=isSignal(cv);
+    const st=states[ri],sig=st.sig,dyn=st.dyn;
     const isFocused=!focusRegion||focusRegion===rg.id;
     const p=document.createElement('div');
-    p.className='panel'+(focusRegion===rg.id?' sel':'')+(sig?' alert-panel':'')+(isFocused?'':' dimmed');
-    if(focusRegion===rg.id) p.style.borderColor=rg.color;
-    const lagD=cv.ld,lagLbl=lagD>0?`S +${lagD}d ahead`:lagD<0?`M ${Math.abs(lagD)}d ahead`:'co-incident';
-    const lagPct=50+(lagD/14)*40;
-    const velPct=Math.round(Math.abs(cv.nvel)*100);
-    const velLbl=cv.nvel>0.35?`+${velPct}% accel`:cv.nvel<-0.35?`${velPct}% decel`:'stable';
-    const dominant=cv.themes[0];
-    const combinedConf=Math.round(((cv.sc2+cv.mc+cv.nc)/3)*100);
+    p.className='panel'+(focusRegion===rg.id?' sel':'')+(dyn.p_stag>0.55?' alert-panel':'')+(isFocused?'':' dimmed');
+    if(focusRegion===rg.id) p.style.borderColor=dyn.color;
 
-    let h=`<div class="dominant-headline">${dominant.label}</div>`;
+    const lag=sig.a_norm-sig.m_norm;
+    const lagLbl=lag>0.2?`A +${(lag*5).toFixed(1)} ahead`:lag<-0.2?`M ${Math.abs(lag*5).toFixed(1)} ahead`:'co-incident';
+    const lagPct=50+lag*40;
+    const signal=getSignalText(dyn);
+    const dashLen=(dyn.H/Math.log(2))*75;
+
+    let h=`<div class="dominant-headline">${dyn.label} — ${dyn.regime}</div>`;
     h+=`<div class="ph">
       <div style="display:flex;align-items:center;gap:5px">
-        <div style="width:5px;height:5px;border-radius:50%;background:${rg.color};flex-shrink:0"></div>
+        <div style="width:5px;height:5px;border-radius:50%;background:${dyn.color};flex-shrink:0"></div>
         <div class="pn">${rg.label}</div>
       </div>
-      <div class="bdg" style="color:${e.color};border-color:${e.color}40">${e.label}</div>
+      <div style="position:relative;display:inline-flex;align-items:center;justify-content:center">
+        <div class="bdg" style="color:${dyn.color};border-color:${dyn.color}40">${dyn.regime}</div>
+        <svg width="28" height="28" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">
+          <circle cx="14" cy="14" r="12" fill="none" stroke="${dyn.color}" stroke-width="1" stroke-dasharray="${dashLen} 75" opacity="0.5"/>
+        </svg>
+      </div>
     </div>`;
-    
 
-    h+=`<div class="sparklines-wrap" id="sparks-${rg.id}">
-      <div class="spark-row"><span class="spark-lbl" style="color:${cl.sC}">S</span><canvas class="spark-canvas" id="sp-sv-${rg.id}"></canvas><span class="spark-val" style="color:${cl.sC}">${Math.round(cv.sv*100)}</span></div>
-      <div class="spark-row"><span class="spark-lbl" style="color:${cl.mC}">M</span><canvas class="spark-canvas" id="sp-mv-${rg.id}"></canvas><span class="spark-val" style="color:${cl.mC}">${Math.round(cv.mv*100)}</span></div>
-      <div class="spark-row"><span class="spark-lbl" style="color:${cl.nC}">N</span><canvas class="spark-canvas" id="sp-nv-${rg.id}"></canvas><span class="spark-val" style="color:${cl.nC}">${Math.round(cv.nv*100)}</span></div>
+    h+=`<div class="sparklines-wrap">
+      <div class="spark-row"><span class="spark-lbl" style="color:${A_COLOR}">A</span><canvas class="spark-canvas" style="height:24px" id="sp-uni-${rg.id}"></canvas></div>
+    </div>`;
+
+    h+=`<div class="trow3">
+      <div class="tcol"><div class="thead" style="color:${BULL_COLOR}">P(bull)</div><div class="bw"><div class="bf" style="width:${Math.round(dyn.p_bull*100)}%;background:${BULL_COLOR}"></div></div><div class="bv">${Math.round(dyn.p_bull*100)}%</div></div>
+      <div class="tcol"><div class="thead" style="color:${BEAR_COLOR}">P(bear)</div><div class="bw"><div class="bf" style="width:${Math.round(dyn.p_bear*100)}%;background:${BEAR_COLOR}"></div></div><div class="bv">${Math.round(dyn.p_bear*100)}%</div></div>
+      <div class="tcol"><div class="thead" style="color:${STAG_COLOR}">P(stag)</div><div class="bw"><div class="bf" style="width:${Math.round(dyn.p_stag*100)}%;background:${STAG_COLOR}"></div></div><div class="bv">${Math.round(dyn.p_stag*100)}%</div></div>
     </div>`;
 
     h+=`<div class="esec">
-      <div class="eh">S ↔ M temporal relationship</div>
+      <div class="eh">latent field & tension</div>
+      <div class="trows">
+        <div class="tr"><div class="tl">Ψ</div><div class="tt"><div class="tf" style="width:${Math.min(100,Math.max(0,(dyn.psi+4)/8*100))}%;background:#888"></div></div><div class="tn">${dyn.psi.toFixed(2)}</div></div>
+        <div class="tr"><div class="tl">tension</div><div class="tt"><div class="tf" style="width:${Math.min(100,dyn.tension/4*100)}%;background:${STAG_COLOR}"></div></div><div class="tn">${dyn.tension.toFixed(2)}</div></div>
+        <div class="tr"><div class="tl">entropy</div><div class="tt"><div class="tf" style="width:${Math.min(100,dyn.H/Math.log(2)*100)}%;background:#7B5EA7"></div></div><div class="tn">${dyn.H.toFixed(2)}</div></div>
+      </div>
+    </div>`;
+
+    h+=`<div class="esec">
+      <div class="eh">A ↔ M temporal relationship</div>
       <div class="lagrow">
-        <span style="font-size:8px;color:${cl.sC}">S</span>
+        <span style="font-size:8px;color:${A_COLOR}">A</span>
         <div class="lagtrack">
-          <div style="position:absolute;top:50%;transform:translateY(-50%) translateX(-50%);left:${Math.round(lagPct)}%;width:7px;height:7px;border-radius:50%;background:${e.color};transition:left 0.5s ease"></div>
+          <div style="position:absolute;top:50%;transform:translateY(-50%) translateX(-50%);left:${Math.round(Math.min(95,Math.max(5,lagPct)))}%;width:7px;height:7px;border-radius:50%;background:${dyn.color};transition:left 0.5s ease"></div>
           <div style="position:absolute;top:0;left:50%;width:0.5px;height:100%;background:var(--border2)"></div>
         </div>
-        <span style="font-size:8px;color:${cl.mC}">M</span>
+        <span style="font-size:8px;color:${M_COLOR}">M</span>
       </div>
-      <div class="edesc" style="color:${e.color}">${lagLbl}</div>
-      <div class="edesc" style="color:var(--text3)">${e.desc}</div>
+      <div class="edesc" style="color:${dyn.color}">${lagLbl}</div>
     </div>`;
 
     h+=`<div class="nsec">
       <div class="nh">narrative velocity</div>
-      <div class="nrow"><div class="nvlbl">volume</div><div class="nvtrack"><div class="nvfill" style="width:${Math.round(cv.nv*100)}%;background:${cl.nC}"></div></div><div class="nvnum" style="color:${cl.nC}">${Math.round(cv.nv*100)}</div></div>
-      <div class="nrow"><div class="nvlbl">velocity</div><div class="nvtrack"><div class="nvfill" style="width:${velPct}%;background:${ns.color}"></div></div><div class="nvnum" style="color:${ns.color}">${velLbl}</div></div>
-      <div style="font-size:7px;color:${ns.color};font-style:italic;margin-top:2px">${ns.desc}</div>
+      <div class="nrow"><div class="nvlbl">volume</div><div class="nvtrack"><div class="nvfill" style="width:${Math.round(sig.n*100)}%;background:${N_COLOR}"></div></div><div class="nvnum" style="color:${N_COLOR}">${Math.round(sig.n*100)}</div></div>
+      <div class="nrow"><div class="nvlbl">d/dt</div><div class="nvtrack"><div class="nvfill" style="width:${Math.round(Math.min(100,Math.abs(sig.dn)*200))}%;background:${sig.dn>0?'#C94040':'#4A8C5C'}"></div></div><div class="nvnum" style="color:${sig.dn>0?'#C94040':'#4A8C5C'}">${sig.dn>0?'+':''}${sig.dn.toFixed(2)}</div></div>
     </div>`;
 
-    h+=`<div class="themes-sec"><div class="themes-head">top themes</div>`;
-    cv.themes.forEach(t=>{
-      const arrow=themeArrow(t.velocity);
-      const arrowColor=t.velocity>0.2?'#C94040':t.velocity<-0.2?'#4A8C5C':'#888';
-      h+=`<div class="theme-row">
-        <span class="theme-arrow" style="color:${arrowColor}">${arrow}</span>
-        <div style="flex:1"><div style="font-size:8px;color:var(--text2)">${t.label}</div><div class="theme-vol" style="width:${Math.round(t.volume*100)}%;background:${cl.nC};opacity:0.5"></div></div>
-      </div>`;
-    });
-    h+=`</div>`;
+    h+=`<div class="signal-row" style="background:${signal.color}12;border-color:${signal.color}40">
+      <span class="signal-text" style="color:${signal.color}">${signal.text}</span>
+    </div>`;
 
-    if(sig) h+=`<div class="signal-row"><span style="font-size:9px">⚠</span><span class="signal-text">signal emerging — divergence + acceleration</span></div>`;
-
-    if(showUncertainty){
-      h+=`<div class="sigrow">`;
-      const bars=5,filled=Math.round((combinedConf/100)*5);
-      for(let i=0;i<bars;i++) h+=`<div style="width:3px;height:${4+i*2}px;background:${i<filled?'var(--text2)':'var(--border)'};border-radius:1px;opacity:${i<filled?0.7:0.25}"></div>`;
-      h+=`<span style="font-size:7px;color:var(--text3);margin-left:3px">combined signal ${combinedConf}%</span></div>`;
+    if(st.hasLive){
+      h+=`<div style="position:absolute;top:6px;right:6px;width:5px;height:5px;border-radius:50%;background:#4A8C5C;animation:livePulse 2.1s infinite"></div>`;
     }
 
     p.innerHTML=h;
@@ -669,24 +950,14 @@ function panels(){
     con.appendChild(p);
 
     requestAnimationFrame(()=>{
-      drawSparkline(document.getElementById(`sp-sv-${rg.id}`),history[rg.id].sv,cl.sC,cv.sv);
-      drawSparkline(document.getElementById(`sp-mv-${rg.id}`),history[rg.id].mv,cl.mC,cv.mv);
-      drawSparkline(document.getElementById(`sp-nv-${rg.id}`),history[rg.id].nv,cl.nC,cv.nv);
+      drawUnifiedSparkline(document.getElementById(`sp-uni-${rg.id}`),history[rg.id].a,history[rg.id].m,history[rg.id].n);
     });
   });
 }
 
-document.querySelectorAll('.cb').forEach(btn=>{
-  btn.onclick=()=>{
-    sc=btn.dataset.cl;
-    document.querySelectorAll('.cb').forEach(b=>{b.classList.remove('active');b.style.borderColor='';});
-    const cl=CLUSTERS.find(c=>c.id===sc);
-    btn.classList.add('active');btn.style.borderColor=cl.color+'55';
-    document.getElementById('footer-text').textContent=FOOTER_TEXT[sc];
-    draw();panels();
-  };
-});
-
+// ═══════════════════════════════════════════════════════════════
+// UI & CONTROLS
+// ═══════════════════════════════════════════════════════════════
 document.querySelectorAll('.th-btn').forEach(btn=>{
   btn.onclick=()=>{
     timeHorizon=btn.dataset.th;
@@ -710,373 +981,138 @@ function updateTime(){
     now.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
 }
 
-// ── Live data pipeline — three axes ─────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// LIVE DATA
+// ═══════════════════════════════════════════════════════════════
 const API_URL = 'https://animalspirits-api.onrender.com';
 window.liveMarkets = null;
 window.liveSentiment = null;
 window.liveNarrative = null;
-let apiStatus = 'loading';
-let liveAxes = 0;
+const axisStatus = {market:false, sentiment:false, narrative:false};
 
-
-
-async function safeFetch(url) {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch(e) {
-    console.warn('fetch failed', url, e.message);
-    return null;
-  }
+function updateAPIBadge(){
+  const badge=document.getElementById('api-badge');
+  if(!badge) return;
+  const m=axisStatus.market?'M●':'M○';
+  const s=axisStatus.sentiment?'S●':'S○';
+  const n=axisStatus.narrative?'N●':'N○';
+  badge.innerHTML=`<span style="color:${axisStatus.market?'#4A8C5C':'var(--text3)'}">${m}</span> <span style="color:${axisStatus.sentiment?'#E8803A':'var(--text3)'}">${s}</span> <span style="color:${axisStatus.narrative?'#A855C8':'var(--text3)'}">${n}</span>`;
+  badge.title=`Market: ${axisStatus.market?'live':'simulated'} · Attention: ${axisStatus.sentiment?'live':'simulated'} · Narrative: ${axisStatus.narrative?'live':'simulated'}`;
 }
 
-// ── Browser-direct GDELT ──────────────────────────────────────
-const GDELT_BASE = 'https://api.gdeltproject.org/api/v2/doc/doc';
-const GDELT_QUERIES = {
-  anxiety:    {us:'economy recession unemployment inflation',    uk:'economy recession cost living',       india:'economy recession inflation rupee'},
-  confidence: {us:'economic growth jobs investment bull market', uk:'economic growth investment jobs',     india:'economic growth investment gdp'},
-  aspiration: {us:'luxury travel real estate consumer spending', uk:'luxury travel property spending',    india:'luxury travel consumer middle class'},
-  constraint: {us:'budget cuts debt bankruptcy frugal',          uk:'austerity budget food bank debt',    india:'budget savings debt frugal austerity'},
-};
-
-async function fetchGDELT(cluster) {
-  // uses safeFetch — Render already awake by the time this is called
-  try {
-    const res = await fetch(`${API_URL}/api/gdelt/cluster/${cluster}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch(e) {
-    console.warn('GDELT fetch failed', cluster, e.message);
-    return null;
-  }
-}
-
-// ── Browser-direct Wikimedia ──────────────────────────────────
-const WIKI_TERMS = {
-  anxiety:    {us:['Recession','Unemployment','Stock_market_crash'],    uk:['Recession','Unemployment','Cost_of_living_crisis'], india:['Recession','Unemployment_in_India','Inflation']},
-  confidence: {us:['Bull_market','Economic_growth','Consumer_confidence'], uk:['Economic_growth','Consumer_confidence','Investment'], india:['Economic_growth','Bull_market','Investment']},
-  aspiration: {us:['Luxury_goods','Travel','Real_estate'],              uk:['Luxury_goods','Travel','Property'],                  india:['Luxury_goods','Tourism','Real_estate']},
-  constraint: {us:['Budget','Debt','Frugality'],                        uk:['Austerity','Budget','Food_bank'],                   india:['Budget','Debt','Frugality']},
-};
-
-async function fetchWikiViews(article) {
-  try {
-    const end = new Date(); const start = new Date(end - 7*86400000);
-    const fmt = d => d.toISOString().slice(0,10).replace(/-/g,'');
-    const url = `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/all-agents/${article}/daily/${fmt(start)}/${fmt(end)}`;
-    const res = await fetch(url, {headers:{'User-Agent':'AnimalSpirits/1.0'}});
-    if (!res.ok) return 0;
-    const d = await res.json();
-    const items = d.items || [];
-    return items.length ? items.reduce((a,b) => a + b.views, 0) / items.length : 0;
-  } catch(e) { return 0; }
-}
-
-async function fetchSentiment(region, cluster) {
-  const terms = (WIKI_TERMS[cluster] || {})[region] || [];
-  if (!terms.length) return null;
-  const views = await Promise.all(terms.map(t => fetchWikiViews(t)));
-  const total = views.reduce((a,b) => a+b, 0);
-  if (!total) return null;
-  const normalised = Math.min(total / 50000, 1);
-  return {
-    value: Math.round(normalised*1000)/1000,
-    confidence: 0.72, source: 'Wikimedia Pageviews',
-    terms, views: views.map(Math.round),
-  };
-}
-
-async function fetchAllSentiment() {
-  const result = {};
-  for (const region of ['us','uk','india']) {
-    result[region] = {};
-    for (const cluster of ['anxiety','confidence','aspiration','constraint']) {
-      result[region][cluster] = await fetchSentiment(region, cluster);
-    }
-  }
-  return result;
-}
-
-async function fetchAllNarrative() {
-  // fetch active cluster only — respects GDELT rate limit
-  // background: fetch remaining clusters after initial load
-  const activeResult = await fetchGDELT(sc);
-  if (!activeResult) return null;
-  // reshape to {region: {cluster: data}} format
-  const result = {};
-  for (const region of ['us','uk','india']) {
-    result[region] = {};
-    if (activeResult[region]) {
-      result[region][sc] = activeResult[region];
-    }
-  }
-  // schedule background fetch of other clusters (non-blocking)
-  setTimeout(async () => {
-    for (const cluster of ['anxiety','confidence','aspiration','constraint']) {
-      if (cluster === sc) continue;
-      const r = await fetchGDELT(cluster);
-      if (r && window.liveNarrative) {
-        for (const region of ['us','uk','india']) {
-          if (r[region]) window.liveNarrative[region][cluster] = r[region];
-        }
-      }
-      await new Promise(res => setTimeout(res, 500));
-    }
-  }, 5000);
-  return result;
-}
-
-// axis status — tracks each independently
-const axisStatus = { market: false, sentiment: false, narrative: false };
-
-function updateAPIBadge() {
-  const badge = document.getElementById('api-badge');
-  if (!badge) return;
-  const m = axisStatus.market    ? 'M●' : 'M○';
-  const s = axisStatus.sentiment ? 'S●' : 'S○';
-  const n = axisStatus.narrative ? 'N●' : 'N○';
-  const anyLive = axisStatus.market || axisStatus.sentiment || axisStatus.narrative;
-  badge.innerHTML = `<span style="color:${axisStatus.market?'#4A8C5C':'var(--text3)'}">${m}</span> <span style="color:${axisStatus.sentiment?'#E8803A':'var(--text3)'}">${s}</span> <span style="color:${axisStatus.narrative?'#A855C8':'var(--text3)'}">${n}</span>`;
-  badge.title = `Market: ${axisStatus.market?'live':'simulated'} · Sentiment: ${axisStatus.sentiment?'live':'simulated'} · Narrative: ${axisStatus.narrative?'live':'simulated'}`;
-}
-
-async function fetchWithWake(url, maxWaitMs=90000) {
-  // try immediately first
-  try {
-    const r = await fetch(url);
-    if (r.ok) return await r.json();
-  } catch(e) {}
-  // wake Render then retry every 12s
-  const start = Date.now();
-  while (Date.now() - start < maxWaitMs) {
-    await new Promise(res => setTimeout(res, 12000));
-    try {
-      const r = await fetch(url);
-      if (r.ok) return await r.json();
-    } catch(e) {}
+async function fetchWithWake(url,maxWaitMs=90000){
+  try{const r=await fetch(url);if(r.ok)return await r.json();}catch(e){}
+  const start=Date.now();
+  while(Date.now()-start<maxWaitMs){
+    await new Promise(res=>setTimeout(res,12000));
+    try{const r=await fetch(url);if(r.ok)return await r.json();}catch(e){}
   }
   return null;
 }
 
-async function fetchLiveData() {
-  const badge = document.getElementById('api-badge');
-  if (badge) { badge.textContent = 'connecting...'; badge.style.color = 'var(--text3)'; }
-
-  // step 1: wake Render and fetch market — this ensures API is alive before narrative calls
-  const mkt = await fetchWithWake(API_URL + '/api/market/all', 90000);
-  if (mkt && Object.values(mkt).some(v => v !== null)) {
-    window.liveMarkets = mkt; axisStatus.market = true;
-    updateAPIBadge(); panels(); draw();
-  }
-
-  // step 2: sentiment (browser-direct) and narrative (via now-awake Render) in parallel
-  const [sentRes, narrRes] = await Promise.allSettled([
-    fetchAllSentiment(),
-    fetchAllNarrative(),
-  ]);
-
-  const sent = sentRes.status === 'fulfilled' ? sentRes.value : null;
-  const narr = narrRes.status === 'fulfilled' ? narrRes.value : null;
-
-  if (sent && Object.values(sent).some(r => Object.values(r).some(Boolean))) {
-    window.liveSentiment = sent; axisStatus.sentiment = true;
-  }
-  if (narr && Object.values(narr).some(r => Object.values(r).some(Boolean))) {
-    window.liveNarrative = narr; axisStatus.narrative = true;
-  }
-
-  updateAPIBadge(); panels(); draw();
+async function fetchWikiViews(article){
+  try{
+    const end=new Date();const start=new Date(end-7*86400000);
+    const fmt=d=>d.toISOString().slice(0,10).replace(/-/g,'');
+    const url=`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/all-agents/${article}/daily/${fmt(start)}/${fmt(end)}`;
+    const res=await fetch(url,{headers:{'User-Agent':'AnimalSpirits/1.0'}});
+    if(!res.ok) return 0;
+    const d=await res.json();
+    const items=d.items||[];
+    return items.length?items.reduce((a,b)=>a+b.views,0)/items.length:0;
+  }catch(e){return 0;}
 }
 
-// gd() — live-aware wrapper around gdSim()
-function gd(ri) {
-  const result = gdSim(ri);
-  const regionId = ['us','uk','india'][ri];
+async function fetchSentiment(region,cluster){
+  const WIKI_TERMS={
+    anxiety:{us:['Recession','Unemployment','Stock_market_crash'],uk:['Recession','Unemployment','Cost_of_living_crisis'],india:['Recession','Unemployment_in_India','Inflation']},
+    confidence:{us:['Bull_market','Economic_growth','Consumer_confidence'],uk:['Economic_growth','Consumer_confidence','Investment'],india:['Economic_growth','Bull_market','Investment']},
+    aspiration:{us:['Luxury_goods','Travel','Real_estate'],uk:['Luxury_goods','Travel','Property'],india:['Luxury_goods','Tourism','Real_estate']},
+    constraint:{us:['Budget','Debt','Frugality'],uk:['Austerity','Budget','Food_bank'],india:['Budget','Debt','Frugality']},
+  };
+  const terms=(WIKI_TERMS[cluster]||{})[region]||[];
+  if(!terms.length) return null;
+  const views=await Promise.all(terms.map(t=>fetchWikiViews(t)));
+  const total=views.reduce((a,b)=>a+b,0);
+  if(!total) return null;
+  const normalised=Math.min(total/50000,1);
+  return{value:Math.round(normalised*1000)/1000,confidence:0.72,source:'Wikimedia Pageviews',terms,views:views.map(Math.round)};
+}
 
-  // inject live market axis
-  const mkt = window.liveMarkets && window.liveMarkets[regionId];
-  if (mkt && mkt.field_value != null) {
-    ['anxiety','confidence','aspiration','constraint'].forEach(cl => {
-      if (result[cl]) {
-        result[cl].mv = mkt.field_value;
-        result[cl].mc = mkt.confidence || 0.85;
-      }
-    });
+async function fetchAllSentiment(){
+  const result={};
+  for(const region of ['us','uk','india']){
+    result[region]={};
+    for(const cluster of ['anxiety','confidence','aspiration','constraint']){
+      result[region][cluster]=await fetchSentiment(region,cluster);
+    }
   }
-
-  // inject live sentiment axis
-  const sent = window.liveSentiment && window.liveSentiment[regionId];
-  if (sent) {
-    ['anxiety','confidence','aspiration','constraint'].forEach(cl => {
-      const s = sent[cl];
-      if (s && s.value != null && result[cl]) {
-        result[cl].sv = s.value;
-        result[cl].sc2 = s.confidence || 0.72;
-      }
-    });
-  }
-
-  // inject live narrative axis
-  const narr = window.liveNarrative && window.liveNarrative[regionId];
-  if (narr) {
-    ['anxiety','confidence','aspiration','constraint'].forEach(cl => {
-      const n = narr[cl];
-      if (n && result[cl]) {
-        result[cl].nv  = Math.min(Math.max((n.tone_normalised || 0.5), 0), 1);
-        result[cl].nvel = n.velocity || 0;
-        result[cl].nc  = n.confidence || 0.75;
-        if (n.dominant_headline) {
-          result[cl].themes = [{
-            label: n.dominant_headline.substring(0, 60),
-            volume: n.tone_normalised || 0.5,
-            velocity: n.velocity || 0,
-          }, ...result[cl].themes.slice(0,2)];
-        }
-      }
-    });
-  }
-
   return result;
 }
-// ─────────────────────────────────────────────────────────────
 
-document.getElementById('footer-text').textContent=FOOTER_TEXT[sc];
-panels(); updateTime();
-setInterval(updateTime, 30000);
-setInterval(()=>{
-  seed+=0.018; pulse=!pulse;
+async function fetchGDELT(cluster){
+  try{
+    const res=await fetch(`${API_URL}/api/gdelt/cluster/${cluster}`);
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){return null;}
+}
+
+async function fetchLiveData(){
+  const badge=document.getElementById('api-badge');
+  if(badge){badge.textContent='connecting...';badge.style.color='var(--text3)';}
+  const mkt=await fetchWithWake(API_URL+'/api/market/all',90000);
+  if(mkt&&Object.values(mkt).some(v=>v!==null)){window.liveMarkets=mkt;axisStatus.market=true;updateAPIBadge();}
+  const sent=await fetchAllSentiment();
+  if(sent&&Object.values(sent).some(r=>Object.values(r).some(Boolean))){window.liveSentiment=sent;axisStatus.sentiment=true;}
+  const narr=await fetchGDELT('anxiety');
+  if(narr){window.liveNarrative=narr;axisStatus.narrative=true;}
+  updateAPIBadge();invalidateStateCache();panels();draw();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INITIALISATION & TICK
+// ═══════════════════════════════════════════════════════════════
+const FOOTER_TEXT='The system tracks three continuous collective states — Bull (expansion), Bear (contraction), and Stag (instability). Attention, market, and narrative signals are smoothed via EMA, normalised per region, and projected into a latent field Ψ. Probabilities emerge from the field dynamics, not from thresholds. Stag is not a third independent class: it is the tension produced when attention, market, and narrative axes diverge or accelerate.';
+
+document.getElementById('footer-text').textContent=FOOTER_TEXT;
+
+d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(w=>{
+  mapSvg.append('g').selectAll('path')
+    .data(topojson.feature(w,w.objects.countries).features)
+    .join('path').attr('d',d3.geoPath(proj))
+    .attr('fill',isDark?'#252525':'#e4e1d8')
+    .attr('stroke',isDark?'#333':'#ccc9bf')
+    .attr('stroke-width',0.35);
+  initSystem();
+  draw();panels();updateTime();
+  setTimeout(tick,120);
+}).catch(()=>{initSystem();draw();panels();updateTime();setTimeout(tick,120);});
+
+function tick(){
+  invalidateStateCache();
+  const states=getAllRegionStates();
+
+  pulse=!pulse;
   document.getElementById('pdot').style.opacity=pulse?'0.9':'0.3';
+
+  const meanDN=states.reduce((a,s)=>a+Math.abs(s.sig.dn),0)/states.length;
+  const nextInterval=Math.max(800,Math.min(5000,2800/(1+0.3*meanDN)));
+
   REGIONS.forEach((r,ri)=>{
-    const d=gd(ri),cv=d[sc];
-    history[r.id].sv.push(cv.sv); history[r.id].sv.shift();
-    history[r.id].mv.push(cv.mv); history[r.id].mv.shift();
-    history[r.id].nv.push(cv.nv); history[r.id].nv.shift();
+    const st=states[ri];
+    history[r.id].a.push(st.sig.a);history[r.id].a.shift();
+    history[r.id].m.push(st.sig.m);history[r.id].m.shift();
+    history[r.id].n.push(st.sig.n);history[r.id].n.shift();
   });
-  draw(); panels();
-}, 2800);
-window.addEventListener('resize', ()=>setTimeout(draw, 60));
+  draw();panels();
+  setTimeout(tick,nextInterval);
+}
 
+window.addEventListener('resize',()=>setTimeout(draw,60));
 updateAPIBadge();
-setTimeout(draw, 120);
-fetchLiveData();
-setInterval(fetchLiveData, 15 * 60 * 1000);
-
-// ═══════════════════════════════════════════════════════════════
-// OBSERVATORY LAYER — system reading, signal typing, narrative force
-// ═══════════════════════════════════════════════════════════════
-
-// ── Signal type classification ────────────────────────────────
-function classifySignal(cv) {
-  const div = Math.abs(cv.sv - cv.mv);
-  const vel = cv.nvel || 0;
-  const lag = Math.abs(cv.ld || 0);
-  if (div > 0.3 && Math.abs(vel) > 0.35)  return { id:'dislocation',        label:'dislocation',        color:'#C94040', desc:'divergence with accelerating narrative' };
-  if (div > 0.3 && vel < -0.2)             return { id:'compression',        label:'compression',        color:'#7B5EA7', desc:'divergence, narrative fading' };
-  if (div < 0.12 && Math.abs(vel) > 0.35) return { id:'consensus',          label:'consensus forming',  color:'#4A8C5C', desc:'alignment with narrative acceleration' };
-  if (lag > 6)                             return { id:'lag-tension',        label:'lag tension',        color:'#B5883A', desc:'significant temporal offset between axes' };
-  if (div > 0.2 && lag > 3)               return { id:'drift',              label:'drift',              color:'#888888', desc:'gradual divergence developing' };
-  return null;
-}
-
-// ── Narrative force — amplify/dampen based on velocity ────────
-function applyNarrativeForce(cv) {
-  const vel = cv.nvel || 0;
-  const nv  = cv.nv   || 0.5;
-  const force = vel * 0.15; // moderate — max ±15% effect
-  const dispersion = Math.abs(vel) * 0.08;
-  return {
-    sv: Math.min(Math.max(cv.sv + force * nv, 0), 1),
-    mv: Math.min(Math.max(cv.mv - force * 0.5, 0), 1),
-    dispersion,
-  };
-}
-
-// ── Signal memory ─────────────────────────────────────────────
-const signalMemory = [];
-const MAX_MEMORY = 5;
-
-function recordSignal(region, cluster, sigType) {
-  if (!sigType) return;
-  // deduplicate — don't record same signal twice in a row for same region
-  const last = signalMemory[0];
-  if (last && last.region === region && last.type === sigType.id) return;
-  signalMemory.unshift({ region, cluster, type: sigType.id, label: sigType.label,
-                         color: sigType.color, ts: Date.now() });
-  if (signalMemory.length > MAX_MEMORY) signalMemory.pop();
-}
-
-function renderSignalMemory() {
-  const el = document.getElementById('signal-memory');
-  if (!el) return;
-  if (!signalMemory.length) { el.innerHTML = ''; return; }
-  const now = Date.now();
-  el.innerHTML = signalMemory.map(s => {
-    const age = Math.floor((now - s.ts) / 60000);
-    const timeLabel = age < 1 ? 'just now' : age < 5 ? 'recent' : `${age}m ago`;
-    return `<div class="sig-type" style="color:${s.color};border-color:${s.color}50">
-      ${s.region.toUpperCase()} · ${s.label} <span style="opacity:0.5;margin-left:3px">${timeLabel}</span>
-    </div>`;
-  }).join('');
-}
-
-// ── System-level reading ──────────────────────────────────────
-let lastReading = '';
-let readingTimeout = null;
-
-function computeSystemReading(allData) {
-  // aggregate signals across all regions for active cluster
-  const clusterData = REGIONS.map((r,i) => allData[i][sc]);
-  const divs    = clusterData.map(cv => Math.abs((cv.sv||0.5) - (cv.mv||0.5)));
-  const vels    = clusterData.map(cv => cv.nvel || 0);
-  const lags    = clusterData.map(cv => Math.abs(cv.ld || 0));
-  const avgDiv  = divs.reduce((a,b)=>a+b,0)/divs.length;
-  const avgVel  = vels.reduce((a,b)=>a+b,0)/vels.length;
-  const avgLag  = lags.reduce((a,b)=>a+b,0)/lags.length;
-  const maxDiv  = Math.max(...divs);
-  const maxVel  = Math.max(...vels.map(Math.abs));
-
-  // pick the most salient reading
-  // check for global synchronisation — all regions in same entanglement state
-  const states = clusterData.map(cv => getES(cv).id);
-  const allSame = states.every(s => s === states[0]);
-  if (allSame && states[0] !== 'concurrent')
-    return `Global synchronisation — all regions ${states[0].replace('-',' ')} simultaneously`;
-
-  if (maxDiv > 0.35 && maxVel > 0.4)
-    return 'Narrative accelerating through divergent conditions across regions';
-  if (maxDiv > 0.35 && avgVel < -0.2)
-    return 'Divergence persisting as narrative momentum fades';
-  if (avgDiv < 0.1 && maxVel > 0.35)
-    return 'Broad alignment — narrative building ahead of markets';
-  if (avgDiv < 0.1 && maxVel < 0.1)
-    return 'System in relative equilibrium — axes closely entangled';
-  if (avgLag > 5)
-    return 'Temporal lag accumulating — sentiment and markets drifting apart';
-  if (maxDiv > 0.25)
-    return 'Divergence emerging between sentiment and market fields';
-  if (avgVel > 0.25)
-    return 'Narrative velocity rising — watch for field separation';
-  if (avgVel < -0.25)
-    return 'Narrative losing momentum across regions';
-  return 'Partial alignment with mixed signals across axes';
-}
-
-function updateSystemReading(allData) {
-  const reading = computeSystemReading(allData);
-  if (reading === lastReading) return;
-  const el = document.getElementById('system-reading');
-  if (!el) return;
-  // slow fade update — avoid flickering
-  if (readingTimeout) clearTimeout(readingTimeout);
-  el.style.opacity = '0';
-  readingTimeout = setTimeout(() => {
-    el.textContent = reading;
-    el.style.opacity = '1';
-    lastReading = reading;
-  }, 600);
-}
-
+setTimeout(fetchLiveData,120);
+setInterval(fetchLiveData,15*60*1000);
 </script>
 </body>
 </html>
