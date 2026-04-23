@@ -103,6 +103,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
   50%{opacity:1}
 }
 </style>
+<base target="_blank">
 </head>
 <body>
 <div class="page">
@@ -110,7 +111,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
 <div class="hdr">
   <div>
     <div class="title">Animal Spirits</div>
-    <div class="sub">A platform for mapping collective affect and economic behaviour</div>
+    <div class="sub">A real-time interface for reading collective behaviour</div>
   </div>
   <div style="text-align:right;flex-shrink:0">
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-bottom:2px">
@@ -120,6 +121,8 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
     <div id="tdisp" style="font-size:8px;color:var(--text3)"></div>
   </div>
 </div>
+
+<div id="global-headline" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>
 
 <div class="ctrls">
   <span style="font-size:8px;color:var(--text3);white-space:nowrap">regime</span>
@@ -172,7 +175,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);min-hei
     </div>
   </div>
   <div class="ibox" id="ibox" style="display:none">
-    <div class="bt">insight</div>
+    <div class="bt">posture</div>
     <div class="ih" id="ibox-head"></div>
     <div class="ipct" id="ibox-pct"></div>
     <div id="ibox-lines"></div>
@@ -509,6 +512,59 @@ function drawPsiContour(ctx,w,h,rgs,states){
 }
 
 // ═══════════════════════════════════════════════════════════════
+// POSTURE LAYER
+// ═══════════════════════════════════════════════════════════════
+function getPosture(st){
+  const {sig, dyn} = st;
+
+  const alignment_low = Math.abs(sig.a_norm - sig.m_norm) > 0.5;
+
+  let posture;
+  if (dyn.p_stag > 0.6) posture = "Pause";
+  else if (alignment_low) posture = "Caution";
+  else posture = "Lean";
+
+  let alignment = alignment_low
+    ? "Signals are out of sync"
+    : "Signals are moving together";
+
+  let lag;
+  if (sig.a_norm > sig.m_norm + 0.3) lag = "Attention is leading";
+  else if (sig.m_norm > sig.a_norm + 0.3) lag = "Markets are leading";
+  else lag = "No clear lead";
+
+  return {
+    posture,
+    alignment,
+    lag
+  };
+}
+
+function updateGlobalHeadline(states){
+  let lean=0, caution=0, pause=0;
+
+  states.forEach(st=>{
+    const p = getPosture(st).posture;
+    if(p==="Lean") lean++;
+    else if(p==="Caution") caution++;
+    else pause++;
+  });
+
+  let global;
+  if(pause>=1) global="Pause";
+  else if(caution>=1) global="Caution";
+  else global="Lean";
+
+  let desc =
+    global==="Lean" ? "signals moving together" :
+    global==="Caution" ? "signals diverging" :
+    "instability elevated";
+
+  document.getElementById('global-headline').textContent =
+    `Global: ${global} — ${desc}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // RENDERING LAYER
 // ═══════════════════════════════════════════════════════════════
 function getCoords(){
@@ -518,36 +574,6 @@ function getCoords(){
     const [x,y]=proj([rg.lng,rg.lat]);
     return {...rg,px:x*s,py:y*s};
   });
-}
-
-function getInsight(rg, st){
-  const {sig, dyn} = st;
-  const lag = sig.a_norm - sig.m_norm;
-
-  return {
-    region: rg.label,
-    regime: dyn.regime,
-    confidence: Math.max(dyn.p_bull, dyn.p_bear, dyn.p_stag),
-
-    drivers: {
-      psi: dyn.psi,
-      tension: dyn.tension,
-      entropy: dyn.H,
-      narrative_velocity: sig.dn,
-      market_momentum: sig.dm
-    },
-
-    interpretation: [
-      lag > 0.2 ? "attention leading" :
-      lag < -0.2 ? "market leading" : "co-incident",
-
-      dyn.p_stag > 0.5 ? "high instability" :
-      dyn.H > 0.5 ? "elevated entropy" : "stable",
-
-      sig.dn > 0.2 ? "narrative accelerating" :
-      sig.dn < -0.2 ? "narrative cooling" : "narrative steady"
-    ]
-  };
 }
 
 function drawSparkline(canvas,data,color,val){
@@ -969,10 +995,13 @@ function panels(){
       const ibox=document.getElementById('ibox');
       if(focusRegion){
         const st=states[ri];
-        const insight=getInsight(rg,st);
-        document.getElementById('ibox-head').textContent=insight.region+' — '+insight.regime;
-        document.getElementById('ibox-pct').textContent=Math.round(insight.confidence*100)+'% confidence';
-        document.getElementById('ibox-lines').innerHTML=insight.interpretation.map(line=>`<div class="iln">• ${line}</div>`).join('');
+        const p=getPosture(st);
+        document.getElementById('ibox-head').textContent=rg.label;
+        document.getElementById('ibox-pct').textContent=p.posture;
+        document.getElementById('ibox-lines').innerHTML=`
+          <div class="iln">${p.alignment}</div>
+          <div class="iln">${p.lag}</div>
+        `;
         ibox.style.display='block';
       }else{
         ibox.style.display='none';
@@ -1124,6 +1153,8 @@ d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(w
 function tick(){
   invalidateStateCache();
   const states=getAllRegionStates();
+
+  updateGlobalHeadline(states);
 
   pulse=!pulse;
   document.getElementById('pdot').style.opacity=pulse?'0.9':'0.3';
