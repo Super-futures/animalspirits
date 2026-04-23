@@ -1,270 +1,149 @@
 # Animal Spirits
 
-**A relational visualisation of collective behavioural states**
+**A platform for mapping collective affect and economic behaviour.**
 
-Animal Spirits is a computational observatory that models economic behaviour as an emergent field arising from the interaction of three signal domains. Rather than treating attention, market, and narrative as separate indicators, the system renders their interdependence as a continuous behavioural regime.
-
-The project draws on Keynes's notion of *animal spirits*, reframed as a **collective system condition** rather than an individual psychological driver. Behaviour is not measured directly. It is inferred from the relationships between signals.
+A single-file, real-time visualisation of three entangled signals — **Attention**, **Market**, and **Narrative** — projected into a latent field that resolves into continuous regime probabilities: **Bull**, **Bear**, and **Stag**.
 
 ---
 
-## Concept
+## Quick Start
 
-The system separates two distinct properties of collective behaviour:
+Open `animalspirits_v11.html` in any modern browser. No build step or server required.
 
-- **Direction** — expansionary vs contractionary momentum (Bull ↔ Bear)
-- **Tension** — stability vs instability arising from misalignment (Stag)
-
-These are not categories or labels. They are **probabilistic conditions** of the system at a given moment, derived from a low-dimensional dynamical field.
-
----
-
-## The three axes
-
-| Axis | Signal | Visual language | Source |
-|---|---|---|---|
-| Attention (A) | Wikipedia pageview volume for economic terms | Warm · circular · diffuse | Wikimedia Pageviews API |
-| Market (M) | Index log-return momentum + volatility | Cool · rounded-rectangle · defined | Yahoo Finance (via proxy) |
-| Narrative (N) | News volume + velocity | Violet · directional arrows | GDELT Project |
-
-Each axis represents a distinct dimension:
-- **A** → what draws collective cognitive focus
-- **M** → what constrains or enables action
-- **N** → what stories propagate and at what speed
-
-No single axis is sufficient. Insight emerges from their **interaction**.
-
----
-
-## Signal pipeline
-
-All signals pass through a common processing layer before entering the dynamical model:
-
-1. **Smoothing** — EMA (α ≈ 0.25) applied to raw attention, log-returns, and narrative volume
-2. **Derivatives** — finite-difference velocity for market (`dM`) and narrative (`dN`), clamped to [-1.0, 1.0]
-3. **Volatility** — rolling standard deviation of market returns (`V`)
-4. **Normalisation** — per-region z-score over a rolling buffer: `X' = (X - μ) / σ`
-
-This ensures scale invariance and cross-region comparability.
-
----
-
-## Latent field
-
-A single scalar field is constructed from the normalised signals:
-
-```
-Ψ(t) = 0.8·A'(t) + 1.0·M'(t) + 0.9·N'(t)
-```
-
-Ψ encodes the combined directional pressure of the system. It is not a sentiment score — it is a **field coordinate**.
-
----
-
-## Behavioural states
-
-### Bull / Bear (directional field)
-
-```
-z_bull = Ψ + a·dM'          (a ≈ 0.8)
-z_bear = -Ψ + b·dN'         (b ≈ 0.6)
-
-P_bull_raw = sigmoid(z_bull)
-P_bear_raw = sigmoid(z_bear)
-Z = P_bull_raw + P_bear_raw
-
-P_bull = P_bull_raw / Z
-P_bear = P_bear_raw / Z
-```
-
-### Stag (instability field)
-
-Stag is not a third independent class. It is an **emergent property** of misalignment:
-
-```
-tension = |A' - M'| + k·|dN'| + v·max(0, V')    (k ≈ 0.5, v ≈ 0.4)
-P_stag = sigmoid(tension - 1.0)
-```
-
-When attention and market diverge, narrative accelerates, or volatility rises, tension increases and the system enters a transitional state.
-
----
-
-## System metrics
-
-### Entropy
-
-```
-H = -(P_bull·log(P_bull) + P_bear·log(P_bear))
-```
-
-- Low H → confident regime (bull or bear dominant)
-- High H → transition / uncertainty
-
-### Instability
-
-```
-instability = P_stag + H
-```
-
-Used to modulate visual diffusion, fragmentation, and desaturation.
-
-### Temporal lag
-
-```
-L(t) ≈ A'(t) - M'(t)
-```
-
-Encodes which axis leads. Visualised as spatial offset between attention and market blooms.
-
----
-
-## Visual language
-
-The map encodes relationships, not values:
-
-| Mathematical quantity | Visual encoding |
-|---|---|
-| A ↔ M offset | Spatial displacement between blooms |
-| dN | Narrative arrow direction and density |
-| V | Diffusion radius |
-| P_bull / P_bear | Continuous green ↔ red gradient |
-| P_stag | Fragmentation, desaturation, blur |
-| H | Entropy ring dash ratio around regime badge |
-| instability | Ghost trail intensity, deterministic jitter, opacity modulation |
-
-**Ghost trails** — canvas fade at 8% per frame makes drift and regime shifts visible as motion smear.
-
-**Stag fragmentation** — when instability > 0.6, blooms split into 2–5 orbiting satellites (count scales with entropy). Reads as "coming apart."
-
-**Narrative wake** — decaying arrow tails over 4 frames make velocity visible over time.
-
-**RBF isolines** — Ψ = 0 contour drawn via radial-basis interpolation between region centres. Faint neutral membrane separating bullish and bearish territories.
-
-**Curved entanglement arcs** — quadratic Bézier links between regions, thickness scaling with narrative delta, colour shifting toward source regime.
-
-**Unified sparklines** — single 24 px canvas per panel with A, M, N in horizontal bands. Fill between A and M shows divergence directly.
-
----
-
-## Interaction
-
-Clicking a region panel toggles **focus mode**:
-
-- The selected region is highlighted with a focus ring
-- Non-selected regions dim to 25% opacity
-- RBF isolines and entanglement arcs are suppressed to reduce visual noise
-- An **insight panel** appears on the map with a structured reading:
-
-```
-region — regime
-confidence %
-
-• attention leading / market leading / co-incident
-• high instability / elevated entropy / stable
-• narrative accelerating / cooling / steady
-```
-
-The insight is computed live from the dynamical state (`Ψ`, tension, entropy, narrative velocity, market momentum) and is not pre-written. It is a **state-derived interpretation** of the latent field.
-
-Clicking the same panel again releases focus and restores the full field view.
-
----
-
-## Regions
-
-| Region | Attention | Market | Narrative | Rhythm |
-|---|---|---|---|---|
-| United States | Wikimedia (English) | S&P 500 + VIX | GDELT (English) | Baseline |
-| United Kingdom | Wikimedia (English) | FTSE 100 | GDELT (English) | Slower · more persistent |
-| India | Wikimedia (English) | Nifty 50 + India VIX | GDELT (English) | Faster · higher variance |
-
-Regional rhythm differences are structural. Signals are normalised per region to preserve comparability.
-
-**Methodological note:** English-language Wikipedia and GDELT coverage reflects anglophone media and search behaviour. This limitation is declared rather than suppressed.
-
----
-
-## Data sources
-
-| Source | Axis | Key |
-|---|---|---|
-| [Yahoo Finance](https://finance.yahoo.com) | Market — S&P 500, FTSE 100, Nifty 50, VIX | None |
-| [Wikimedia Pageviews API](https://wikimedia.org/api/rest_v1/) | Attention — article views by term | None |
-| [GDELT Project](https://www.gdeltproject.org) | Narrative — global news volume and velocity | None |
-
----
-
-## Live data status
-
-Per-axis status in the bottom right:
-
-- `M●` green — market axis live · `M○` — simulated
-- `A●` orange — attention axis live · `A○` — simulated
-- `N●` violet — narrative axis live · `N○` — simulated
-
-The system runs fully on simulated data if APIs are unavailable. The API wakes from sleep on first load (free tier — allow ~50 seconds on first visit).
-
----
-
-## Structure
-
-```
-animal-spirits/
-├── index.html          # frontend — D3 + Canvas, single file
-├── README.md
-└── api/
-    ├── main.py         # FastAPI backend — market, narrative proxy
-    ├── requirements.txt
-    ├── render.yaml
-    └── README.md
-```
-
-Attention (Wikimedia) and some narrative (GDELT) calls are made browser-direct where CORS permits. Market data (Yahoo Finance) routes via the Render proxy due to cloud IP restrictions.
-
----
-
-## Running locally
-
-**Frontend**
-Open `index.html` directly in a browser. Runs on simulated data without the API.
-
-**API**
 ```bash
-cd api
-pip install -r requirements.txt
-uvicorn main:app --reload
+open animalspirits_v11.html
 ```
-Then open `http://localhost:8000/api/debug`
+
+The prototype fetches live data where available and falls back to a synthetic dynamics engine when offline.
 
 ---
 
-## Deploying
+## What It Shows
 
-**Frontend → GitHub Pages or Netlify**
+### Three Axes
 
-**API → Render**
-Connect the repo to Render, set root directory to `api/`. Free tier supported.
+| Axis | Visual | Meaning |
+|------|--------|---------|
+| **Attention** | Warm, diffuse circles | Collective focus and affect intensity |
+| **Market** | Cool, defined squares | Price momentum and economic momentum |
+| **Narrative** | Purple directional arrows | Story volume and velocity (tone × spread) |
+
+### Three Regimes
+
+The system does not use thresholds. Probabilities emerge from field dynamics:
+
+- **Bull** (green) — Expansion. Signals aligned upward.
+- **Bear** (red) — Contraction. Signals aligned downward.
+- **Stag** (amber) — Instability. High tension when axes diverge or accelerate.
+
+### Posture (v11)
+
+Posture replaces dense technical readouts with an immediate, human-readable stance:
+
+| Posture | Condition | Meaning |
+|---------|-----------|---------|
+| **Lean** | Signals aligned | Momentum is coherent. Safe to follow the drift. |
+| **Caution** | Signals out of sync (\|A − M\| > 0.5) | Divergence between attention and market. Risk of reversal. |
+| **Pause** | P(stag) > 0.6 | Instability elevated. Wait for clarity. |
+
+Click any region panel to see its **Posture**, **Alignment**, and **Lag** (who is leading: attention or markets).
+
+### Global Headline
+
+A single sentence under the header aggregates all regions:
+
+> **Global: Lean — signals moving together**  
+> **Global: Caution — signals diverging**  
+> **Global: Pause — instability elevated**
 
 ---
 
-## Intellectual context
+## Architecture
 
-The project engages Keynes's original formulation of animal spirits, Robert Shiller's narrative economics thesis, and the tradition of data-driven affective mapping in media art and critical design. A research paper formalising the conceptual framework is in preparation.
+```
+┌─────────────────────────────────────┐
+│  SVG World Map (D3 + TopoJSON)      │
+│  Canvas Overlay (blooms, trails,    │
+│  arrows, isolines, fragmentation)   │
+├─────────────────────────────────────┤
+│  Signal Layer (EMA, Derivative,     │
+│  Rolling Std, Per-region norm)      │
+├─────────────────────────────────────┤
+│  Dynamics Layer (Ψ field, tension,  │
+│  entropy, regime probabilities)     │
+├─────────────────────────────────────┤
+│  Data Layer                         │
+│  • Wikimedia pageviews (attention)  │
+│  • GDELT (narrative tone)           │
+│  • Custom market API                │
+│  • Synthetic fallback engine        │
+└─────────────────────────────────────┘
+```
+
+### Key Design Decisions
+
+- **Single file** — HTML, CSS, and JS in one document for zero-friction prototyping.
+- **Canvas over SVG** — Geographic features in SVG; high-frequency particle effects, trails, and narrative arrows in Canvas.
+- **Synthetic fallback** — A stochastic latent-variable engine generates plausible dynamics when live APIs are unavailable or cold.
+- **No thresholds** — Regimes are probabilistic outputs of a latent field, not hard rules.
 
 ---
 
-## Status
+## Data Sources
 
-v0.10 prototype · continuous behavioural field model · 3 regions · 3 axes · 3 states · insight-driven interaction
-
-This is a research prototype and affective observatory. It is not a trading signal engine.
+| Source | Axis | Endpoint / Method |
+|--------|------|-------------------|
+| Wikimedia REST API | Attention | `pageviews/per-article` for clustered terms (anxiety, confidence, aspiration, constraint) |
+| GDELT | Narrative | `/api/gdelt/cluster/{cluster}` via Render proxy |
+| Custom Market API | Market | `/api/market/all` via Render |
+| Synthetic Engine | All | Internal Brownian-motion latent variable with regime-dependent drift |
 
 ---
 
-## Limitations
+## Mathematical Model
 
-- Signals are partial and culturally situated (anglophone bias)
-- Narrative data is noisy and uneven across regions
-- The model is low-dimensional and intentionally reductive
-- The system is not predictive and should not be used for trading
+The system projects three smoothed, normalised signals into a latent field **Ψ**:
+
+```
+Ψ = 0.8·A_norm + 1.0·M_norm + 0.9·N_norm
+```
+
+From Ψ and the derivatives of market and narrative signals, it computes:
+
+- **P(Bull)** — `sigmoid(Ψ + a·ΔM)`
+- **P(Bear)** — `sigmoid(-Ψ + b·ΔN)`
+- **Tension** — `|A − M| + k·|ΔN| + v_w·max(0, V)`
+- **P(Stag)** — `sigmoid(tension − 1.0)`
+- **Entropy H** — Shannon entropy of the bull/bear distribution
+- **Instability** — `P(Stag) + H`
+
+These values drive every visual parameter: bloom size, colour, fragmentation, jitter, dash patterns, and narrative arrow density.
+
+---
+
+## Controls
+
+- **Regime slider** — Live aggregate bear/bull balance across all regions.
+- **Time horizon** — `24h` / `7d` / `30d` rolling pulse (modulates synthetic drift speed).
+- **Uncertainty toggle** — Visualises diffusion rings when instability is elevated.
+- **Region click** — Focus a region to dim others and reveal its Posture box.
+
+---
+
+## Browser Support
+
+Chrome, Safari, Firefox, Edge (latest). Requires ES6 and Canvas 2D.
+
+---
+
+## Notes
+
+- The Render API may cold-start after periods of inactivity; the UI indicates live vs. simulated status per axis.
+- Map data is loaded from `world-atlas@2` via jsDelivr CDN.
+- D3.js v7 and TopoJSON v3 are loaded from cdnjs.
+
+---
+
+## License
+
+Prototype v0.9 — for evaluation and demonstration.
