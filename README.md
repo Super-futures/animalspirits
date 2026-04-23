@@ -1,6 +1,6 @@
 # Animal Spirits
 
-**A platform for mapping collective affect and economic behaviour.**
+**A real-time interface for reading collective behaviour.**
 
 A single-file, real-time visualisation of three entangled signals — **Attention**, **Market**, and **Narrative** — projected into a latent field that resolves into continuous regime probabilities: **Bull**, **Bear**, and **Stag**.
 
